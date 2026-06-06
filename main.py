@@ -14,9 +14,9 @@ from contextlib import asynccontextmanager
 from typing import Any
 
 import uvicorn
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse as _JSONResponse
+from fastapi.responses import FileResponse, JSONResponse as _JSONResponse
 
 
 class JSONResponse(_JSONResponse):
@@ -420,6 +420,67 @@ async def query(request: Request) -> JSONResponse:
         return JSONResponse({"question": question, "answer": answer})
     finally:
         await router.aclose()
+
+
+# ── Municipality search (cached) ─────────────────────────────────────────────
+
+_municipios_cache: list[dict] | None = None
+
+
+async def _get_all_municipios() -> list[dict]:
+    global _municipios_cache
+    if _municipios_cache is None:
+        import httpx as _httpx
+        async with _httpx.AsyncClient(timeout=20) as c:
+            r = await c.get("https://servicodados.ibge.gov.br/api/v1/localidades/municipios")
+            r.raise_for_status()
+            data = r.json()
+        result = []
+        for m in data:
+            try:
+                uf = m["microrregiao"]["mesorregiao"]["UF"]
+                result.append({
+                    "id": str(m["id"]),
+                    "nome": m["nome"],
+                    "estado": uf["sigla"],
+                    "estado_nome": uf["nome"],
+                    "regiao": uf["regiao"]["sigla"],
+                })
+            except (TypeError, KeyError):
+                result.append({
+                    "id": str(m["id"]),
+                    "nome": m["nome"],
+                    "estado": "?",
+                    "estado_nome": "?",
+                    "regiao": "?",
+                })
+        _municipios_cache = result
+        logger.info(f"Municipality cache loaded: {len(_municipios_cache)} municipalities")
+    return _municipios_cache
+
+
+@app.get("/v1/municipios/buscar", tags=["municipios"])
+async def buscar_municipios(
+    nome: str = Query(default="", description="Nome (ou parte) do município"),
+    uf: str = Query(default="", description="Sigla do estado (ex: SP)"),
+    limit: int = Query(default=10, le=50),
+) -> JSONResponse:
+    """Search municipalities by name and/or UF (cached from IBGE)."""
+    todos = await _get_all_municipios()
+    filtered = todos
+    if nome:
+        q = nome.lower()
+        filtered = [m for m in filtered if q in m["nome"].lower()]
+    if uf:
+        filtered = [m for m in filtered if m["estado"].upper() == uf.upper()]
+    return JSONResponse({"municipios": filtered[:limit], "total": len(filtered)})
+
+
+# ── Frontend ──────────────────────────────────────────────────────────────────
+
+@app.get("/", include_in_schema=False)
+async def serve_frontend() -> FileResponse:
+    return FileResponse("frontend/index.html", media_type="text/html")
 
 
 # ── Entry point ───────────────────────────────────────────────────────────────

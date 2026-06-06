@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS — Inteligência Territorial</title>
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = { darkMode: 'class' }
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+    <style>
+        [x-cloak] { display: none !important; }
+        * { font-family: 'Inter', sans-serif; }
+        body { background: #060c1a; }
+
+        .glass {
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255,255,255,0.07);
+        }
+        .glass-light {
+            background: rgba(30, 41, 59, 0.55);
+            border: 1px solid rgba(255,255,255,0.08);
+        }
+        .glow-blue  { box-shadow: 0 0 40px rgba(59,130,246,0.13), 0 1px 3px rgba(0,0,0,0.4); }
+        .glow-green { box-shadow: 0 0 40px rgba(16,185,129,0.10), 0 1px 3px rgba(0,0,0,0.4); }
+
+        .gradient-text {
+            background: linear-gradient(135deg, #60a5fa 0%, #34d399 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .sugg-box {
+            background: #0b1a30;
+            border: 1px solid rgba(59,130,246,0.35);
+            box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+        }
+
+        @keyframes flow { 0%,100%{opacity:.35;transform:translateX(-2px)} 50%{opacity:1;transform:translateX(2px)} }
+        @keyframes pulse-ring { 0%,100%{box-shadow:0 0 0 0 rgba(59,130,246,.5)} 50%{box-shadow:0 0 0 7px rgba(59,130,246,0)} }
+        @keyframes pulse-ring-g { 0%,100%{box-shadow:0 0 0 0 rgba(16,185,129,.5)} 60%{box-shadow:0 0 0 7px rgba(16,185,129,0)} }
+        @keyframes slide-up { from{opacity:0;transform:translateY(18px)} to{opacity:1;transform:translateY(0)} }
+
+        .flow-anim  { animation: flow 1.4s ease-in-out infinite; }
+        .agent-load { animation: pulse-ring 1.2s ease-in-out infinite; }
+        .agent-done { animation: pulse-ring-g .7s ease-out 1; }
+        .slide-up   { animation: slide-up .45s ease-out forwards; }
+        .card-lift  { transition: transform .2s ease; }
+        .card-lift:hover { transform: translateY(-2px); }
+
+        .tab-on  { color:#60a5fa; border-bottom:2px solid #3b82f6; }
+        .tab-off { color:#475569; border-bottom:2px solid transparent; }
+        .tab-off:hover { color:#94a3b8; }
+
+        input { transition: border-color .15s, box-shadow .15s; }
+        input:focus { outline:none; border-color:#3b82f6; box-shadow:0 0 0 2px rgba(59,130,246,.25); }
+
+        ::-webkit-scrollbar { width:5px; height:5px; }
+        ::-webkit-scrollbar-track { background:#0f172a; }
+        ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+    </style>
+</head>
+<body class="text-slate-100 min-h-screen" x-data="nexus()" x-init="init()">
+
+<!-- ════════════════════════════════ NAV ════════════════════════════════ -->
+<nav class="fixed top-0 inset-x-0 z-50 glass border-b border-white/5">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+
+        <!-- Logo -->
+        <div class="flex items-center gap-2.5 shrink-0">
+            <div class="w-7 h-7 rounded-lg bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center">
+                <span class="text-white font-black text-xs">NX</span>
+            </div>
+            <span class="font-bold text-sm tracking-tight text-white">NEXUS</span>
+            <span class="hidden sm:inline text-xs text-slate-500 bg-slate-800/70 border border-slate-700 rounded px-2 py-0.5">MCP</span>
+            <span class="hidden sm:inline text-xs text-slate-500 bg-slate-800/70 border border-slate-700 rounded px-2 py-0.5">Azure AI</span>
+        </div>
+
+        <!-- Tabs -->
+        <div class="flex">
+            <template x-for="t in tabs" :key="t.id">
+                <button @click="tab = t.id"
+                        :class="tab===t.id ? 'tab-on' : 'tab-off'"
+                        class="px-3 sm:px-5 py-4 text-xs sm:text-sm font-medium transition-colors whitespace-nowrap"
+                        x-text="t.label"></button>
+            </template>
+        </div>
+
+        <!-- API pill -->
+        <div class="flex items-center gap-1.5 shrink-0 text-xs">
+            <div :class="apiOnline===true?'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,.6)]':apiOnline===false?'bg-red-500':'bg-slate-500 animate-pulse'"
+                 class="w-1.5 h-1.5 rounded-full"></div>
+            <span class="hidden sm:inline text-slate-500"
+                  x-text="apiOnline===true?'API online':apiOnline===false?'API offline':'...'"></span>
+        </div>
+    </div>
+</nav>
+
+
+<!-- ══════════════════════════ TAB: CONSULTAR ══════════════════════════ -->
+<section x-show="tab==='consultar'" class="pt-14">
+
+    <!-- Hero -->
+    <div class="max-w-3xl mx-auto px-4 sm:px-6 pt-12 pb-7 text-center">
+        <p class="text-xs font-bold tracking-widest text-blue-400 uppercase mb-4">
+            Microsoft Agents League · AI Skills Fest 2026
+        </p>
+        <h1 class="text-3xl sm:text-5xl font-black leading-tight mb-3">
+            <span class="gradient-text">Inteligência Territorial</span><br>
+            <span class="text-slate-200 text-2xl sm:text-3xl font-bold">para o Setor Público Brasileiro</span>
+        </h1>
+        <p class="text-slate-400 max-w-xl mx-auto text-base">
+            Dados fiscais, territoriais e sociais de qualquer município cruzados
+            por agentes de IA em tempo real.
+        </p>
+    </div>
+
+    <!-- Search card -->
+    <div class="max-w-2xl mx-auto px-4 sm:px-6 pb-5">
+        <div class="glass rounded-2xl p-5 sm:p-7 glow-blue">
+
+            <!-- Municipality input -->
+            <div class="mb-4 relative">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Município</label>
+                <div class="relative">
+                    <input x-model="muniQuery"
+                           @input.debounce.280ms="searchMuni(muniQuery,'main')"
+                           @focus="if(muniResults.length) showSugg=true"
+                           @keydown.escape="showSugg=false"
+                           @keydown.enter="muniResults.length && selectMuni(muniResults[0])"
+                           type="text" placeholder="Ex: Campinas, Fortaleza, Belém..."
+                           :class="selectedMuni?'border-emerald-600/80':'border-slate-700'"
+                           class="w-full bg-slate-800/70 border rounded-xl px-4 py-3 pr-10 text-white placeholder-slate-500 text-sm">
+                    <div x-show="muniLoading" class="absolute right-3 top-3">
+                        <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                    </div>
+                    <span x-show="selectedMuni && !muniLoading" class="absolute right-3 top-3 text-emerald-400 text-sm">✓</span>
+                </div>
+
+                <!-- Suggestions -->
+                <div x-show="showSugg && muniResults.length" x-cloak
+                     @click.outside="showSugg=false"
+                     class="sugg-box absolute z-50 w-full mt-1 rounded-xl overflow-hidden">
+                    <template x-for="m in muniResults" :key="m.id">
+                        <button @click="selectMuni(m); showSugg=false"
+                                class="w-full flex items-center justify-between px-4 py-3 hover:bg-blue-600/20 transition-colors text-left">
+                            <div>
+                                <span class="text-sm font-medium text-white" x-text="m.nome"></span>
+                                <span class="text-xs text-slate-400 ml-1" x-text="'/ '+m.estado_nome"></span>
+                            </div>
+                            <span class="text-xs text-slate-600 font-mono" x-text="m.id"></span>
+                        </button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- Question -->
+            <div class="mb-5">
+                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                    Pergunta <span class="normal-case font-normal text-slate-600">(opcional)</span>
+                </label>
+                <input x-model="question" @keydown.enter="consultar()" type="text"
+                       placeholder="Ex: Quantos estabelecimentos de saúde e qual o PIB per capita?"
+                       class="w-full bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm">
+            </div>
+
+            <!-- CTA -->
+            <button @click="consultar()" :disabled="!selectedMuni||loading"
+                    class="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-all
+                           bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400
+                           disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2.5">
+                <div x-show="loading" class="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></div>
+                <span x-text="loading?'Consultando agentes…':'Consultar →'"></span>
+            </button>
+        </div>
+
+        <!-- Quick chips -->
+        <div class="flex flex-wrap justify-center gap-2 mt-4">
+            <span class="text-xs text-slate-600">Acesso rápido:</span>
+            <template x-for="q in quickAccess" :key="q.id">
+                <button @click="quickSelect(q)"
+                        :class="selectedMuni?.id===q.id
+                            ? 'border-blue-500 text-blue-300 bg-blue-500/10'
+                            : 'border-slate-700 text-slate-500 hover:border-slate-500 hover:text-slate-300'"
+                        class="text-xs px-3 py-1.5 rounded-full border transition-all"
+                        x-text="q.nome+'/'+q.estado"></button>
+            </template>
+        </div>
+    </div>
+
+    <!-- Agent flow -->
+    <div x-show="loading||results" x-cloak class="max-w-3xl mx-auto px-4 sm:px-6 pb-5">
+        <div class="glass rounded-2xl p-5">
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-5">
+                Agentes em Ação
+                <span class="text-blue-400 ml-2 normal-case font-normal text-xs"
+                      x-text="selectedMuni ? '— '+selectedMuni.nome+'/'+selectedMuni.estado+' ('+selectedMuni.id+')' : ''"></span>
+            </p>
+
+            <div class="flex flex-col sm:flex-row items-start sm:items-center justify-center gap-4">
+
+                <!-- Router -->
+                <div class="shrink-0">
+                    <div :class="{
+                             'border-blue-500 agent-load': agentStatuses.router==='loading',
+                             'border-emerald-500 agent-done': agentStatuses.router==='done',
+                             'border-slate-700': agentStatuses.router==='idle'
+                         }"
+                         class="glass-light rounded-xl p-4 border-2 w-36 text-center transition-all">
+                        <div class="text-2xl mb-1">⬡</div>
+                        <p class="text-xs font-bold text-white">Router Agent</p>
+                        <p class="text-xs text-slate-600">Azure AI</p>
+                        <p :class="{
+                               'text-blue-400':   agentStatuses.router==='loading',
+                               'text-emerald-400':agentStatuses.router==='done',
+                               'text-slate-600':  agentStatuses.router==='idle'
+                           }"
+                           class="text-xs mt-1 font-medium"
+                           x-text="{idle:'—',loading:'analisando…',done:'✓ despachado',error:'✗ erro'}[agentStatuses.router]||'—'"></p>
+                    </div>
+                </div>
+
+                <!-- Arrow -->
+                <div class="hidden sm:flex flex-col gap-4">
+                    <template x-for="i in [1,2,3]" :key="i">
+                        <span :class="agentStatuses.router==='done'?'text-blue-400 flow-anim':'text-slate-700'"
+                              class="text-base transition-colors">→</span>
+                    </template>
+                </div>
+
+                <!-- Sub-agents -->
+                <div class="flex flex-col gap-2 flex-1 w-full sm:w-auto">
+                    <template x-for="ag in subAgents" :key="ag.id">
+                        <div :class="{
+                                 'border-blue-500 agent-load': agentStatuses[ag.id]==='loading',
+                                 'border-emerald-500 agent-done': agentStatuses[ag.id]==='done',
+                                 'border-slate-700': agentStatuses[ag.id]==='idle'
+                             }"
+                             class="glass-light rounded-xl px-4 py-3 border-2 transition-all flex items-center gap-3">
+                            <span class="text-lg" x-text="ag.icon"></span>
+                            <div class="flex-1 min-w-0">
+                                <p class="text-xs font-bold text-white" x-text="ag.label"></p>
+                                <p class="text-xs text-slate-500 truncate" x-text="ag.source"></p>
+                            </div>
+                            <p :class="{
+                                   'text-blue-400':   agentStatuses[ag.id]==='loading',
+                                   'text-emerald-400':agentStatuses[ag.id]==='done',
+                                   'text-slate-600':  agentStatuses[ag.id]==='idle'
+                               }"
+                               class="text-xs font-bold shrink-0"
+                               x-text="{idle:'—',loading:'…',done:'✓',error:'✗'}[agentStatuses[ag.id]]||'—'"></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Results -->
+    <div x-show="results" x-cloak class="max-w-7xl mx-auto px-4 sm:px-6 pb-16">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
+
+            <!-- TERRITORIAL -->
+            <div x-show="results?.territorial" class="glass rounded-2xl p-5 sm:p-6 card-lift slide-up glow-green">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-500/15 flex items-center justify-center shrink-0">🗺️</div>
+                    <div>
+                        <p class="font-bold text-white text-sm">Territorial</p>
+                        <p class="text-xs text-slate-500">IBGE · Localidades + SIDRA</p>
+                    </div>
+                    <span class="ml-auto text-xs bg-emerald-900/40 text-emerald-400 border border-emerald-800/50 rounded-full px-2 py-0.5">IBGE</span>
+                </div>
+
+                <template x-if="results?.territorial?.municipio">
+                    <div class="space-y-3">
+                        <div class="rounded-lg bg-emerald-500/8 border border-emerald-500/15 p-3 mb-3">
+                            <p class="text-base font-bold text-white" x-text="results.territorial.municipio.nome"></p>
+                            <p class="text-xs text-slate-400"
+                               x-text="(results.territorial.municipio.estado_nome||results.territorial.municipio.estado) + ' · Região ' + (results.territorial.municipio.regiao||'—')"></p>
+                            <p class="text-xs text-slate-500 mt-0.5" x-text="results.territorial.municipio.mesorregiao||''"></p>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-3">
+                            <div class="rounded-lg bg-slate-800/50 p-3">
+                                <p class="text-xs text-slate-500 mb-1">Pop. Censo 2022</p>
+                                <p class="text-lg font-bold text-emerald-400" x-text="fmtNum(results.territorial.populacao?.populacao_censo_2022)"></p>
+                                <p class="text-xs text-slate-600">hab.</p>
+                            </div>
+                            <div class="rounded-lg bg-slate-800/50 p-3">
+                                <p class="text-xs text-slate-500 mb-1">PIB/cap. 2021</p>
+                                <p class="text-sm font-bold text-emerald-300" x-text="fmtCurrencyK(results.territorial.pib?.pib_per_capita_reais)"></p>
+                                <p class="text-xs text-slate-600">R$/hab.</p>
+                            </div>
+                        </div>
+
+                        <template x-if="results.territorial.populacao?.populacao_estimada_2024">
+                            <div class="flex justify-between text-xs">
+                                <span class="text-slate-500">Est. 2024</span>
+                                <span class="text-slate-300 font-medium"
+                                      x-text="fmtNum(results.territorial.populacao.populacao_estimada_2024)+' hab.'"></span>
+                            </div>
+                        </template>
+                    </div>
+                </template>
+            </div>
+
+            <!-- FISCAL -->
+            <div x-show="results?.fiscal" class="glass rounded-2xl p-5 sm:p-6 card-lift slide-up">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-9 h-9 rounded-xl bg-amber-500/15 flex items-center justify-center shrink-0">💰</div>
+                    <div>
+                        <p class="font-bold text-white text-sm">Fiscal</p>
+                        <p class="text-xs text-slate-500">Portal da Transparência</p>
+                    </div>
+                    <span class="ml-auto text-xs bg-amber-900/40 text-amber-400 border border-amber-800/50 rounded-full px-2 py-0.5">Gov.BR</span>
+                </div>
+
+                <template x-if="!results?.fiscal?.bolsa_familia?.beneficiarios">
+                    <div class="rounded-lg bg-amber-900/15 border border-amber-800/30 p-3 mb-4">
+                        <p class="text-xs text-amber-300 leading-relaxed">
+                            Configure <code class="bg-amber-900/40 px-1 rounded font-mono">TRANSPARENCIA_API_KEY</code>
+                            no <code class="bg-amber-900/40 px-1 rounded font-mono">.env</code> para dados fiscais.
+                            Chave gratuita em portaldatransparencia.gov.br/api-de-dados.
+                        </p>
+                    </div>
+                </template>
+
+                <div class="space-y-3">
+                    <template x-if="results?.fiscal?.bolsa_familia?.beneficiarios">
+                        <div class="rounded-lg bg-amber-500/8 border border-amber-500/15 p-3">
+                            <p class="text-xs text-slate-400 mb-1">Bolsa Família — Beneficiários</p>
+                            <p class="text-2xl font-bold text-amber-400" x-text="fmtNum(results.fiscal.bolsa_familia.beneficiarios)"></p>
+                            <template x-if="results.fiscal.bolsa_familia.valor_total_reais">
+                                <p class="text-xs text-amber-300 mt-0.5"
+                                   x-text="'Valor: '+fmtCurrency(results.fiscal.bolsa_familia.valor_total_reais)"></p>
+                            </template>
+                        </div>
+                    </template>
+
+                    <div class="flex justify-between items-baseline">
+                        <span class="text-xs text-slate-500">Transferências federais</span>
+                        <span class="text-sm font-semibold text-amber-300"
+                              x-text="results?.fiscal?.transferencias_federais?.total_transferido_reais > 0
+                                       ? fmtCurrency(results.fiscal.transferencias_federais.total_transferido_reais) : '—'"></span>
+                    </div>
+                    <div class="flex justify-between items-baseline">
+                        <span class="text-xs text-slate-500">Convênios federais</span>
+                        <span class="text-sm font-semibold text-amber-300"
+                              x-text="results?.fiscal?.convenios?.quantidade_convenios ?? '—'"></span>
+                    </div>
+                    <div class="flex justify-between items-baseline pt-1 border-t border-white/5">
+                        <span class="text-xs text-slate-600">Ano de referência</span>
+                        <span class="text-xs text-slate-500">2024</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SOCIAL -->
+            <div x-show="results?.social" class="glass rounded-2xl p-5 sm:p-6 card-lift slide-up">
+                <div class="flex items-center gap-3 mb-5">
+                    <div class="w-9 h-9 rounded-xl bg-violet-500/15 flex items-center justify-center shrink-0">🏥</div>
+                    <div>
+                        <p class="font-bold text-white text-sm">Social</p>
+                        <p class="text-xs text-slate-500">DATASUS/CNES · INEP</p>
+                    </div>
+                    <span class="ml-auto text-xs bg-violet-900/40 text-violet-400 border border-violet-800/50 rounded-full px-2 py-0.5">MS/MEC</span>
+                </div>
+
+                <div class="space-y-4">
+                    <template x-if="results?.social?.saude?.estabelecimentos?.total_estabelecimentos_amostra != null">
+                        <div>
+                            <div class="rounded-lg bg-violet-500/8 border border-violet-500/15 p-3 mb-3">
+                                <p class="text-xs text-slate-400 mb-1">Estabelecimentos de saúde (amostra CNES)</p>
+                                <p class="text-2xl font-bold text-violet-400"
+                                   x-text="results.social.saude.estabelecimentos.total_estabelecimentos_amostra"></p>
+                                <div class="flex gap-4 mt-1">
+                                    <span class="text-xs text-slate-400"
+                                          x-text="(results.social.saude.estabelecimentos.com_atendimento_sus??'?')+' com SUS'"></span>
+                                    <span class="text-xs text-slate-400"
+                                          x-text="(results.social.saude.estabelecimentos.com_internacao_hospitalar??'?')+' hospitais'"></span>
+                                </div>
+                            </div>
+
+                            <template x-if="results.social.saude.estabelecimentos.por_tipo">
+                                <div class="space-y-2">
+                                    <template x-for="[tipo,qtd] in Object.entries(results.social.saude.estabelecimentos.por_tipo).slice(0,4)" :key="tipo">
+                                        <div class="flex items-center gap-2">
+                                            <div class="flex-1 min-w-0">
+                                                <div class="h-1 bg-violet-500/20 rounded-full">
+                                                    <div class="h-1 bg-violet-400 rounded-full"
+                                                         :style="'width:'+Math.min(100,(qtd/results.social.saude.estabelecimentos.total_estabelecimentos_amostra*100))+'%'"></div>
+                                                </div>
+                                                <p class="text-xs text-slate-500 mt-0.5 truncate" x-text="tipo"></p>
+                                            </div>
+                                            <span class="text-xs text-violet-300 font-bold w-5 text-right shrink-0" x-text="qtd"></span>
+                                        </div>
+                                    </template>
+                                </div>
+                            </template>
+                        </div>
+                    </template>
+
+                    <div class="border-t border-white/5 pt-3">
+                        <p class="text-xs text-slate-500 mb-2">IDEB — Dados INEP 2023</p>
+                        <template x-if="results?.social?.educacao?.ideb?.arquivos?.length > 0">
+                            <div class="flex flex-wrap gap-2">
+                                <template x-for="arq in results.social.educacao.ideb.arquivos.slice(0,3)" :key="arq.descricao">
+                                    <a :href="arq.url" target="_blank"
+                                       class="text-xs bg-slate-800/80 border border-slate-700 rounded-lg px-2.5 py-1
+                                              text-violet-300 hover:border-violet-500 transition-colors"
+                                       x-text="arq.descricao.replace('IDEB — ','').replace(' (XLSX)','')"></a>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </div>
+
+        </div><!-- /grid -->
+    </div>
+</section>
+
+
+<!-- ══════════════════════════ TAB: COMPARAR ══════════════════════════ -->
+<section x-show="tab==='comparar'" x-cloak class="pt-14">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        <h2 class="text-2xl font-bold text-white mb-1">Comparar Municípios</h2>
+        <p class="text-sm text-slate-400 mb-8">Indicadores territoriais, fiscais e sociais lado a lado.</p>
+
+        <!-- Selectors -->
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-5 mb-7">
+            <!-- A -->
+            <div class="glass rounded-2xl p-5">
+                <p class="text-xs font-bold text-blue-400 uppercase tracking-widest mb-3">Município A</p>
+                <div class="relative">
+                    <input x-model="compareAQuery"
+                           @input.debounce.280ms="searchMuni(compareAQuery,'compareA')"
+                           @focus="if(compareAResults.length) showCompareASugg=true"
+                           type="text" placeholder="Buscar município A..."
+                           class="w-full bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm">
+                    <div x-show="showCompareASugg && compareAResults.length" @click.outside="showCompareASugg=false"
+                         class="sugg-box absolute z-50 w-full mt-1 rounded-xl overflow-hidden">
+                        <template x-for="m in compareAResults" :key="m.id">
+                            <button @click="selectMuni(m,'compareA');showCompareASugg=false"
+                                    class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-blue-600/20 transition-colors text-left">
+                                <span class="text-sm text-white" x-text="m.nome+' / '+m.estado"></span>
+                                <span class="text-xs text-slate-600 font-mono" x-text="m.id"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                <template x-if="compareA">
+                    <p class="text-xs text-emerald-400 mt-2">✓ <span x-text="compareA.nome+'/'+compareA.estado"></span></p>
+                </template>
+                <!-- Quick -->
+                <div class="flex flex-wrap gap-1.5 mt-3">
+                    <template x-for="q in quickAccess.slice(0,3)" :key="q.id">
+                        <button @click="selectMuni(q,'compareA');compareAQuery=q.nome+'/'+q.estado"
+                                :class="compareA?.id===q.id?'border-blue-500 text-blue-300':'border-slate-700 text-slate-500'"
+                                class="text-xs px-2.5 py-1 rounded-full border hover:border-blue-600 transition-all"
+                                x-text="q.nome+'/'+q.estado"></button>
+                    </template>
+                </div>
+            </div>
+
+            <!-- B -->
+            <div class="glass rounded-2xl p-5">
+                <p class="text-xs font-bold text-violet-400 uppercase tracking-widest mb-3">Município B</p>
+                <div class="relative">
+                    <input x-model="compareBQuery"
+                           @input.debounce.280ms="searchMuni(compareBQuery,'compareB')"
+                           @focus="if(compareBResults.length) showCompareBSugg=true"
+                           type="text" placeholder="Buscar município B..."
+                           class="w-full bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm">
+                    <div x-show="showCompareBSugg && compareBResults.length" @click.outside="showCompareBSugg=false"
+                         class="sugg-box absolute z-50 w-full mt-1 rounded-xl overflow-hidden">
+                        <template x-for="m in compareBResults" :key="m.id">
+                            <button @click="selectMuni(m,'compareB');showCompareBSugg=false"
+                                    class="w-full flex items-center justify-between px-4 py-2.5 hover:bg-violet-600/20 transition-colors text-left">
+                                <span class="text-sm text-white" x-text="m.nome+' / '+m.estado"></span>
+                                <span class="text-xs text-slate-600 font-mono" x-text="m.id"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                <template x-if="compareB">
+                    <p class="text-xs text-emerald-400 mt-2">✓ <span x-text="compareB.nome+'/'+compareB.estado"></span></p>
+                </template>
+                <div class="flex flex-wrap gap-1.5 mt-3">
+                    <template x-for="q in quickAccess.slice(3,6)" :key="q.id">
+                        <button @click="selectMuni(q,'compareB');compareBQuery=q.nome+'/'+q.estado"
+                                :class="compareB?.id===q.id?'border-violet-500 text-violet-300':'border-slate-700 text-slate-500'"
+                                class="text-xs px-2.5 py-1 rounded-full border hover:border-violet-600 transition-all"
+                                x-text="q.nome+'/'+q.estado"></button>
+                    </template>
+                </div>
+            </div>
+        </div>
+
+        <!-- CTA -->
+        <div class="flex justify-center mb-8">
+            <button @click="comparar()" :disabled="!compareA||!compareB||compareLoading"
+                    class="px-10 py-3.5 rounded-xl font-bold text-sm text-white transition-all
+                           bg-gradient-to-r from-blue-600 via-violet-600 to-violet-500
+                           hover:from-blue-500 hover:to-violet-400
+                           disabled:opacity-40 disabled:cursor-not-allowed
+                           flex items-center gap-2.5 shadow-lg">
+                <div x-show="compareLoading" class="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></div>
+                <span x-text="compareLoading?'Comparando…':'Comparar →'"></span>
+            </button>
+        </div>
+
+        <!-- Table -->
+        <template x-if="compareData">
+            <div class="glass rounded-2xl overflow-hidden slide-up">
+                <div class="overflow-x-auto">
+                <table class="w-full min-w-[560px]">
+                    <thead>
+                        <tr class="border-b border-white/5">
+                            <th class="text-left px-5 py-4 text-xs font-bold text-slate-500 uppercase tracking-wider w-44">Indicador</th>
+                            <th class="px-5 py-4 text-right">
+                                <p class="text-sm font-bold text-blue-400" x-text="compareData.a.muni.nome"></p>
+                                <p class="text-xs text-slate-500" x-text="compareData.a.muni.estado_nome||compareData.a.muni.estado"></p>
+                            </th>
+                            <th class="px-5 py-4 text-right">
+                                <p class="text-sm font-bold text-violet-400" x-text="compareData.b.muni.nome"></p>
+                                <p class="text-xs text-slate-500" x-text="compareData.b.muni.estado_nome||compareData.b.muni.estado"></p>
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/[0.04]">
+                        <!-- Territorial -->
+                        <tr class="bg-emerald-500/[0.04]">
+                            <td colspan="3" class="px-5 py-2.5 text-xs font-bold text-emerald-400 uppercase tracking-widest">🗺️ Territorial — IBGE</td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Região / UF</td>
+                            <td class="px-5 py-3 text-sm font-medium text-right text-white"
+                                x-text="(compareData.a.territorial.municipio?.regiao||'—')+' / '+(compareData.a.territorial.municipio?.estado||'—')"></td>
+                            <td class="px-5 py-3 text-sm font-medium text-right text-white"
+                                x-text="(compareData.b.territorial.municipio?.regiao||'—')+' / '+(compareData.b.territorial.municipio?.estado||'—')"></td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Mesorregião</td>
+                            <td class="px-5 py-3 text-xs text-right text-slate-300" x-text="compareData.a.territorial.municipio?.mesorregiao||'—'"></td>
+                            <td class="px-5 py-3 text-xs text-right text-slate-300" x-text="compareData.b.territorial.municipio?.mesorregiao||'—'"></td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Pop. Censo 2022</td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-emerald-400" x-text="fmtNum(compareData.a.territorial.populacao?.populacao_censo_2022)"></td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-emerald-400" x-text="fmtNum(compareData.b.territorial.populacao?.populacao_censo_2022)"></td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">PIB per capita 2021</td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-emerald-300" x-text="fmtCurrency(compareData.a.territorial.pib?.pib_per_capita_reais)"></td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-emerald-300" x-text="fmtCurrency(compareData.b.territorial.pib?.pib_per_capita_reais)"></td>
+                        </tr>
+                        <!-- Fiscal -->
+                        <tr class="bg-amber-500/[0.04]">
+                            <td colspan="3" class="px-5 py-2.5 text-xs font-bold text-amber-400 uppercase tracking-widest">💰 Fiscal — Transparência</td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Bolsa Família (benef.)</td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-amber-400"
+                                x-text="fmtNum(compareData.a.fiscal.bolsa_familia?.beneficiarios)||'—'"></td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-amber-400"
+                                x-text="fmtNum(compareData.b.fiscal.bolsa_familia?.beneficiarios)||'—'"></td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Transferências federais</td>
+                            <td class="px-5 py-3 text-sm text-right text-amber-300"
+                                x-text="compareData.a.fiscal.transferencias_federais?.total_transferido_reais>0
+                                         ?fmtCurrency(compareData.a.fiscal.transferencias_federais.total_transferido_reais):'—'"></td>
+                            <td class="px-5 py-3 text-sm text-right text-amber-300"
+                                x-text="compareData.b.fiscal.transferencias_federais?.total_transferido_reais>0
+                                         ?fmtCurrency(compareData.b.fiscal.transferencias_federais.total_transferido_reais):'—'"></td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Convênios federais</td>
+                            <td class="px-5 py-3 text-sm text-right text-white"
+                                x-text="compareData.a.fiscal.convenios?.quantidade_convenios??'—'"></td>
+                            <td class="px-5 py-3 text-sm text-right text-white"
+                                x-text="compareData.b.fiscal.convenios?.quantidade_convenios??'—'"></td>
+                        </tr>
+                        <!-- Social -->
+                        <tr class="bg-violet-500/[0.04]">
+                            <td colspan="3" class="px-5 py-2.5 text-xs font-bold text-violet-400 uppercase tracking-widest">🏥 Social — DATASUS / INEP</td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Estab. saúde (CNES)</td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-violet-400"
+                                x-text="compareData.a.social.saude?.estabelecimentos?.total_estabelecimentos_amostra??'—'"></td>
+                            <td class="px-5 py-3 text-sm font-bold text-right text-violet-400"
+                                x-text="compareData.b.social.saude?.estabelecimentos?.total_estabelecimentos_amostra??'—'"></td>
+                        </tr>
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3 text-xs text-slate-400">Com atend. SUS</td>
+                            <td class="px-5 py-3 text-sm text-right text-white"
+                                x-text="compareData.a.social.saude?.estabelecimentos?.com_atendimento_sus??'—'"></td>
+                            <td class="px-5 py-3 text-sm text-right text-white"
+                                x-text="compareData.b.social.saude?.estabelecimentos?.com_atendimento_sus??'—'"></td>
+                        </tr>
+                    </tbody>
+                </table>
+                </div>
+            </div>
+        </template>
+    </div>
+</section>
+
+
+<!-- ════════════════════════════ TAB: HUB ════════════════════════════ -->
+<section x-show="tab==='hub'" x-cloak class="pt-14">
+    <div class="max-w-6xl mx-auto px-4 sm:px-6 py-10">
+        <h2 class="text-2xl font-bold text-white mb-1">NEXUS HUB</h2>
+        <p class="text-sm text-slate-400 mb-10">Arquitetura multi-agente, fluxo de orquestração e fontes de dados.</p>
+
+        <!-- Architecture -->
+        <div class="glass rounded-2xl p-6 sm:p-8 mb-8">
+            <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-10 text-center">Fluxo de Orquestração</p>
+            <div class="flex flex-col items-center gap-4">
+
+                <!-- User -->
+                <div class="glass-light rounded-xl px-6 py-4 text-center w-56">
+                    <div class="text-3xl mb-2">👤</div>
+                    <p class="font-bold text-white text-sm">Gestor Público</p>
+                    <p class="text-xs text-slate-500">Pergunta em linguagem natural</p>
+                </div>
+                <span class="text-slate-600">↓</span>
+
+                <!-- FastAPI -->
+                <div class="rounded-xl border border-blue-500/30 bg-blue-900/10 px-6 py-4 text-center w-72">
+                    <p class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1">FastAPI MCP Server</p>
+                    <p class="text-sm font-bold text-white">POST /v1/query</p>
+                    <div class="flex justify-center gap-2 mt-2">
+                        <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded px-2 py-0.5">SSE Transport</span>
+                        <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded px-2 py-0.5">REST API</span>
+                    </div>
+                </div>
+                <span class="text-slate-600">↓</span>
+
+                <!-- Router Agent -->
+                <div class="rounded-xl border border-indigo-500/30 bg-indigo-900/10 px-6 py-4 text-center w-72">
+                    <p class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">Router Agent</p>
+                    <p class="text-sm font-bold text-white">Azure AI Agent Service</p>
+                    <p class="text-xs text-slate-500 mt-1">GPT-4o · FunctionTool · ToolSet</p>
+                </div>
+                <span class="text-slate-600 text-sm">↓ despacha em paralelo</span>
+
+                <!-- Sub-agents grid -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 w-full max-w-3xl">
+                    <template x-for="ag in allAgents" :key="ag.id">
+                        <div class="rounded-xl border p-4 bg-slate-900/60"
+                             :style="'border-color:'+ag.color+'30'">
+                            <p class="text-sm font-bold text-white mb-0.5"
+                               x-text="ag.icon+' '+ag.label"></p>
+                            <p class="text-xs mb-3" :style="'color:'+ag.color" x-text="ag.dimension+' Agent'"></p>
+                            <div class="space-y-1">
+                                <template x-for="src in ag.sources" :key="src">
+                                    <div class="flex items-center gap-1.5">
+                                        <div class="w-1 h-1 rounded-full bg-slate-700"></div>
+                                        <p class="text-xs text-slate-500" x-text="src"></p>
+                                    </div>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+                </div>
+
+                <!-- Universal key -->
+                <div class="rounded-xl border border-blue-500/20 bg-blue-900/8 px-6 py-3 text-center">
+                    <p class="text-xs text-slate-400 mb-0.5">Chave universal de cruzamento</p>
+                    <p class="text-base font-bold text-blue-300">Código IBGE (7 dígitos)</p>
+                    <p class="text-xs text-slate-500 mt-0.5">Vincula fiscal ↔ territorial ↔ social · 5.570 municípios</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Data sources -->
+        <div class="glass rounded-2xl overflow-hidden mb-8">
+            <div class="px-6 py-4 border-b border-white/5">
+                <p class="font-bold text-white text-sm">Fontes de Dados</p>
+                <p class="text-xs text-slate-500">APIs abertas e gratuitas do governo federal</p>
+            </div>
+            <div class="overflow-x-auto">
+            <table class="w-full min-w-[480px]">
+                <thead>
+                    <tr class="border-b border-white/5 bg-white/[0.01]">
+                        <th class="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase">Dimensão</th>
+                        <th class="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase">Fonte</th>
+                        <th class="text-left px-5 py-3 text-xs font-bold text-slate-500 uppercase hidden sm:table-cell">Endpoint</th>
+                        <th class="text-center px-5 py-3 text-xs font-bold text-slate-500 uppercase">Auth</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/[0.04]">
+                    <template x-for="src in dataSources" :key="src.nome">
+                        <tr class="hover:bg-white/[0.02] transition-colors">
+                            <td class="px-5 py-3">
+                                <span class="text-xs font-bold uppercase tracking-wider" :style="'color:'+src.color" x-text="src.dimensao"></span>
+                            </td>
+                            <td class="px-5 py-3 text-sm text-slate-200" x-text="src.nome"></td>
+                            <td class="px-5 py-3 text-xs text-slate-500 font-mono hidden sm:table-cell" x-text="src.endpoint"></td>
+                            <td class="px-5 py-3 text-center">
+                                <span :class="src.auth==='Gratuito'
+                                         ? 'bg-emerald-900/40 text-emerald-400 border-emerald-800/40'
+                                         : 'bg-amber-900/40 text-amber-400 border-amber-800/40'"
+                                      class="text-xs px-2 py-0.5 rounded-full border" x-text="src.auth"></span>
+                            </td>
+                        </tr>
+                    </template>
+                </tbody>
+            </table>
+            </div>
+        </div>
+
+        <!-- Tech stack -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <template x-for="tech in techStack" :key="tech.name">
+                <div class="glass-light rounded-xl p-4 text-center card-lift">
+                    <div class="text-2xl mb-2" x-text="tech.icon"></div>
+                    <p class="text-sm font-bold text-white" x-text="tech.name"></p>
+                    <p class="text-xs text-slate-500 mt-0.5" x-text="tech.desc"></p>
+                </div>
+            </template>
+        </div>
+    </div>
+</section>
+
+
+<!-- ════════════════════════════ TAB: SOBRE ════════════════════════════ -->
+<section x-show="tab==='sobre'" x-cloak class="pt-14">
+    <div class="max-w-4xl mx-auto px-4 sm:px-6 py-12">
+
+        <!-- Hero -->
+        <div class="text-center mb-14">
+            <div class="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-emerald-500 flex items-center justify-center mx-auto mb-5">
+                <span class="text-white font-black text-xl">NX</span>
+            </div>
+            <h1 class="text-4xl font-black text-white mb-3">NEXUS</h1>
+            <p class="text-slate-300 text-lg mb-4">Plataforma de Inteligência Territorial para o Setor Público Brasileiro</p>
+            <div class="flex justify-center gap-2 flex-wrap">
+                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">Microsoft Agents League</span>
+                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">AI Skills Fest 2026</span>
+                <span class="text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-800/50 rounded-full px-3 py-1">Deadline: 14 jun 2026</span>
+            </div>
+        </div>
+
+        <!-- WHY / HOW / WHAT -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-5 mb-12">
+            <div class="glass rounded-2xl p-6">
+                <div class="text-3xl mb-4">🎯</div>
+                <h3 class="font-bold text-white text-base mb-2">Por Quê</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Municípios brasileiros gerem bilhões em transferências federais com capacidade
+                    limitada de cruzar dados fiscais, sociais e territoriais.
+                    Decisões são tomadas em silos — sem visibilidade integrada.
+                </p>
+            </div>
+            <div class="glass rounded-2xl p-6">
+                <div class="text-3xl mb-4">⚙️</div>
+                <h3 class="font-bold text-white text-base mb-2">Como</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Um Router Agent (Azure AI Agent Service + GPT-4o) recebe a pergunta,
+                    planeja e despacha agentes especializados que consultam APIs governamentais
+                    abertas em paralelo. Resultados são cruzados pelo código IBGE e
+                    sintetizados em linguagem natural.
+                </p>
+            </div>
+            <div class="glass rounded-2xl p-6">
+                <div class="text-3xl mb-4">📊</div>
+                <h3 class="font-bold text-white text-base mb-2">O Quê</h3>
+                <p class="text-slate-400 text-sm leading-relaxed">
+                    Plataforma MCP (Model Context Protocol) com 4 ferramentas de inteligência:
+                    fiscal, territorial, social e cruzamento multi-dimensional —
+                    para qualquer um dos 5.570 municípios brasileiros.
+                </p>
+            </div>
+        </div>
+
+        <!-- Hackathon tracks -->
+        <div class="glass rounded-2xl p-6 mb-8">
+            <h3 class="font-bold text-white text-base mb-5">Trilhas Cobertas</h3>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <template x-for="track in hackathonTracks" :key="track.name">
+                    <div class="rounded-xl border border-blue-500/15 bg-blue-900/5 p-4">
+                        <p class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1.5" x-text="track.icon+' '+track.name"></p>
+                        <p class="text-xs text-slate-400 leading-relaxed" x-text="track.desc"></p>
+                    </div>
+                </template>
+            </div>
+        </div>
+
+        <!-- KPIs -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+            <template x-for="kpi in kpis" :key="kpi.label">
+                <div class="glass-light rounded-xl p-4 text-center">
+                    <p class="text-2xl font-black text-white mb-1" x-text="kpi.value"></p>
+                    <p class="text-xs text-slate-500" x-text="kpi.label"></p>
+                </div>
+            </template>
+        </div>
+
+        <!-- Links -->
+        <div class="flex flex-wrap gap-3 justify-center">
+            <a href="/docs" target="_blank"
+               class="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:border-blue-500 hover:text-blue-400 transition-all text-sm">
+                API Docs →
+            </a>
+            <a href="https://github.com/ph-melo22/nexus-territorial-intelligence" target="_blank"
+               class="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:border-blue-500 hover:text-blue-400 transition-all text-sm">
+                GitHub →
+            </a>
+            <a href="/health" target="_blank"
+               class="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:border-emerald-500 hover:text-emerald-400 transition-all text-sm">
+                Health →
+            </a>
+            <a href="/tools" target="_blank"
+               class="px-5 py-2.5 rounded-xl border border-slate-700 text-slate-300 hover:border-amber-500 hover:text-amber-400 transition-all text-sm">
+                Tools →
+            </a>
+        </div>
+    </div>
+</section>
+
+
+<!-- FOOTER -->
+<footer class="border-t border-white/5 py-6 mt-4">
+    <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-700">
+        <span>NEXUS © 2026 · Microsoft Agents League · AI Skills Fest</span>
+        <span>IBGE · Portal da Transparência · DATASUS · INEP — dados públicos</span>
+    </div>
+</footer>
+
+
+<!-- ════════════════════════════ ALPINE APP ════════════════════════════ -->
+<script>
+function nexus() {
+    return {
+        tab: 'consultar',
+        apiBase: window.location.origin,
+        apiOnline: null,
+
+        tabs: [
+            { id: 'consultar', label: 'Consultar' },
+            { id: 'comparar',  label: 'Comparar'  },
+            { id: 'hub',       label: 'HUB'       },
+            { id: 'sobre',     label: 'Sobre'      },
+        ],
+
+        // Main search
+        muniQuery: '', muniResults: [], muniLoading: false,
+        selectedMuni: null, showSugg: false, question: '',
+
+        // Query
+        loading: false,
+        agentStatuses: { router:'idle', fiscal:'idle', territorial:'idle', social:'idle' },
+        results: null,
+
+        // Compare
+        compareAQuery:'', compareBQuery:'',
+        compareAResults:[], compareBResults:[],
+        showCompareASugg: false, showCompareBSugg: false,
+        compareA: null, compareB: null,
+        compareData: null, compareLoading: false,
+
+        // Quick access
+        quickAccess: [
+            { id:'3509502', nome:'Campinas',  estado:'SP', estado_nome:'São Paulo'  },
+            { id:'2304400', nome:'Fortaleza', estado:'CE', estado_nome:'Ceará'      },
+            { id:'1302603', nome:'Manaus',    estado:'AM', estado_nome:'Amazonas'   },
+            { id:'2611606', nome:'Recife',    estado:'PE', estado_nome:'Pernambuco' },
+            { id:'4106902', nome:'Curitiba',  estado:'PR', estado_nome:'Paraná'     },
+            { id:'2927408', nome:'Salvador',  estado:'BA', estado_nome:'Bahia'      },
+        ],
+
+        // Static config
+        subAgents: [
+            { id:'fiscal',      label:'Fiscal Agent',      source:'Portal da Transparência',   icon:'💰' },
+            { id:'territorial', label:'Territorial Agent', source:'IBGE Localidades · SIDRA',  icon:'🗺️' },
+            { id:'social',      label:'Social Agent',      source:'DATASUS/CNES · INEP',       icon:'🏥' },
+        ],
+        allAgents: [
+            { id:'fiscal',      label:'Fiscal Agent',      icon:'💰', color:'#f59e0b', dimension:'Fiscal',
+              sources:['Portal da Transparência','Bolsa Família','Transferências Federais','Convênios'] },
+            { id:'territorial', label:'Territorial Agent', icon:'🗺️', color:'#10b981', dimension:'Territorial',
+              sources:['IBGE Localidades v1','IBGE SIDRA v3','Censo 2022','PIB per capita'] },
+            { id:'social',      label:'Social Agent',      icon:'🏥', color:'#a78bfa', dimension:'Social',
+              sources:['DATASUS / CNES','OpenDATASUS CKAN','INEP Open Data'] },
+        ],
+        dataSources: [
+            { dimensao:'Territorial', nome:'IBGE Localidades',        endpoint:'servicodados.ibge.gov.br/api/v1', auth:'Gratuito',     color:'#10b981' },
+            { dimensao:'Territorial', nome:'IBGE SIDRA',              endpoint:'servicodados.ibge.gov.br/api/v3', auth:'Gratuito',     color:'#10b981' },
+            { dimensao:'Fiscal',      nome:'Portal da Transparência', endpoint:'api.portaldatransparencia.gov.br', auth:'Chave grátis', color:'#f59e0b' },
+            { dimensao:'Social',      nome:'DATASUS / CNES',          endpoint:'apidadosabertos.saude.gov.br',    auth:'Gratuito',     color:'#a78bfa' },
+            { dimensao:'Social',      nome:'OpenDATASUS CKAN',        endpoint:'opendatasus.saude.gov.br',        auth:'Gratuito',     color:'#a78bfa' },
+            { dimensao:'Social',      nome:'INEP Open Data',          endpoint:'download.inep.gov.br',            auth:'Gratuito',     color:'#a78bfa' },
+        ],
+        techStack: [
+            { icon:'⚡', name:'FastAPI',        desc:'MCP Server + REST' },
+            { icon:'🤖', name:'Azure AI',       desc:'Agent Service'     },
+            { icon:'🔗', name:'MCP',            desc:'SSE Transport'     },
+            { icon:'📡', name:'OpenTelemetry',  desc:'Tracing'           },
+            { icon:'🐳', name:'Docker',         desc:'Containerização'   },
+            { icon:'🐍', name:'Python 3.12',    desc:'Runtime'           },
+            { icon:'🧪', name:'pytest-asyncio', desc:'17 testes ✓'       },
+            { icon:'💻', name:'Copilot',        desc:'GitHub Copilot'    },
+        ],
+        hackathonTracks: [
+            { icon:'🤖', name:'AI Agent',       desc:'Router Agent com Azure AI Agent Service e function-calling multi-turno via FunctionTool + ToolSet.' },
+            { icon:'🔗', name:'MCP',            desc:'FastAPI MCP Server com SSE transport expondo 4 ferramentas de inteligência territorial.' },
+            { icon:'💻', name:'GitHub Copilot', desc:'Código scaffolded e iterado com GitHub Copilot em modo agente.' },
+            { icon:'🛡️', name:'Responsible AI', desc:'Dados exclusivamente de APIs abertas do governo. Sem PII. Proveniência 100% transparente.' },
+        ],
+        kpis: [
+            { value:'5.570', label:'Municípios cobertos' },
+            { value:'4',     label:'Ferramentas MCP'    },
+            { value:'3',     label:'Agentes especial.'  },
+            { value:'17',    label:'Testes passando'    },
+        ],
+
+        // ── Init ──────────────────────────────────────────────────────────
+        async init() {
+            try {
+                const r = await fetch(`${this.apiBase}/health`, { signal: AbortSignal.timeout(4000) });
+                this.apiOnline = r.ok;
+            } catch { this.apiOnline = false; }
+        },
+
+        // ── Municipality search ───────────────────────────────────────────
+        async searchMuni(query, target) {
+            if (!query || query.length < 2) return;
+            if (target === 'main') this.muniLoading = true;
+            try {
+                const r = await fetch(`${this.apiBase}/v1/municipios/buscar?nome=${encodeURIComponent(query)}&limit=8`);
+                if (!r.ok) return;
+                const data = await r.json();
+                const list = data.municipios || [];
+                if (target === 'main') {
+                    this.muniResults = list; this.showSugg = list.length > 0;
+                } else if (target === 'compareA') {
+                    this.compareAResults = list; this.showCompareASugg = list.length > 0;
+                } else {
+                    this.compareBResults = list; this.showCompareBSugg = list.length > 0;
+                }
+            } catch(e) { console.warn('searchMuni', e); }
+            finally { if (target === 'main') this.muniLoading = false; }
+        },
+
+        selectMuni(muni, target = 'main') {
+            if (target === 'main') {
+                this.selectedMuni = muni;
+                this.muniQuery = `${muni.nome}/${muni.estado}`;
+                this.showSugg = false; this.muniResults = [];
+            } else if (target === 'compareA') {
+                this.compareA = muni;
+                this.compareAQuery = `${muni.nome}/${muni.estado}`;
+                this.compareAResults = []; this.showCompareASugg = false;
+            } else {
+                this.compareB = muni;
+                this.compareBQuery = `${muni.nome}/${muni.estado}`;
+                this.compareBResults = []; this.showCompareBSugg = false;
+            }
+        },
+
+        quickSelect(muni) {
+            this.selectedMuni = { ...muni };
+            this.muniQuery = `${muni.nome}/${muni.estado}`;
+            this.showSugg = false;
+        },
+
+        // ── Consultar ─────────────────────────────────────────────────────
+        async consultar() {
+            if (!this.selectedMuni || this.loading) return;
+            this.loading = true;
+            this.results = null;
+            this.agentStatuses = { router:'loading', fiscal:'idle', territorial:'idle', social:'idle' };
+
+            await new Promise(r => setTimeout(r, 480));
+            this.agentStatuses = { router:'done', fiscal:'loading', territorial:'loading', social:'loading' };
+
+            const code = this.selectedMuni.id;
+            const consulta = this.question || `Perfil completo de ${this.selectedMuni.nome}/${this.selectedMuni.estado}`;
+            const post = (path, body) => fetch(`${this.apiBase}${path}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            try {
+                const [fiscal, territorial, social] = await Promise.all([
+                    post('/v1/buscar_fiscal',      { codigo_ibge: code, consulta })
+                        .then(r => { this.agentStatuses = {...this.agentStatuses, fiscal:'done'}; return r.json(); }),
+                    post('/v1/buscar_territorial', { codigo_ibge: code, consulta })
+                        .then(r => { this.agentStatuses = {...this.agentStatuses, territorial:'done'}; return r.json(); }),
+                    post('/v1/buscar_social',      { codigo_ibge: code, consulta })
+                        .then(r => { this.agentStatuses = {...this.agentStatuses, social:'done'}; return r.json(); }),
+                ]);
+                this.results = { fiscal, territorial, social };
+            } catch(e) {
+                console.error('consultar', e);
+                this.agentStatuses = { router:'error', fiscal:'error', territorial:'error', social:'error' };
+            } finally { this.loading = false; }
+        },
+
+        // ── Comparar ──────────────────────────────────────────────────────
+        async comparar() {
+            if (!this.compareA || !this.compareB || this.compareLoading) return;
+            this.compareLoading = true; this.compareData = null;
+            const post = (path, body) => fetch(`${this.apiBase}${path}`, {
+                method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+            }).then(r => r.json());
+            try {
+                const [at, bt, af, bf, as_, bs] = await Promise.all([
+                    post('/v1/buscar_territorial', { codigo_ibge: this.compareA.id }),
+                    post('/v1/buscar_territorial', { codigo_ibge: this.compareB.id }),
+                    post('/v1/buscar_fiscal',      { codigo_ibge: this.compareA.id }),
+                    post('/v1/buscar_fiscal',      { codigo_ibge: this.compareB.id }),
+                    post('/v1/buscar_social',      { codigo_ibge: this.compareA.id }),
+                    post('/v1/buscar_social',      { codigo_ibge: this.compareB.id }),
+                ]);
+                this.compareData = {
+                    a: { muni:this.compareA, territorial:at, fiscal:af, social:as_ },
+                    b: { muni:this.compareB, territorial:bt, fiscal:bf, social:bs  },
+                };
+            } catch(e) { console.error('comparar', e); }
+            finally { this.compareLoading = false; }
+        },
+
+        // ── Formatters ────────────────────────────────────────────────────
+        fmtNum(n) {
+            if (n == null) return '—';
+            const v = parseInt(n);
+            return isNaN(v) ? '—' : v.toLocaleString('pt-BR');
+        },
+        fmtCurrency(n) {
+            if (n == null) return '—';
+            const v = parseFloat(n);
+            return isNaN(v) ? '—' : v.toLocaleString('pt-BR', { style:'currency', currency:'BRL', maximumFractionDigits:0 });
+        },
+        fmtCurrencyK(n) {
+            if (n == null) return '—';
+            const v = parseFloat(n);
+            return isNaN(v) ? '—' : 'R$ '+(v/1000).toLocaleString('pt-BR',{ minimumFractionDigits:1, maximumFractionDigits:1 })+'k';
+        },
+    };
+}
+</script>
+</body>
+</html>

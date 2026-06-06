@@ -17,3 +17,7 @@ opentelemetry-exporter-otlp-proto-grpc>=1.29.0
 # Azure AI Foundry
 azure-ai-projects>=1.0.0b9
 azure-identity>=1.19.0
+
+# File serving & tests
+aiofiles>=23.2.0
+pytest-asyncio>=0.24.0
