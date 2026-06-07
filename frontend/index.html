@@ -110,7 +110,7 @@
     <!-- Hero -->
     <div class="max-w-3xl mx-auto px-4 sm:px-6 pt-12 pb-7 text-center">
         <p class="text-xs font-bold tracking-widest text-blue-400 uppercase mb-4">
-            Microsoft Agents League · AI Skills Fest 2026
+            Plataforma de Inteligência Territorial · Dados Públicos Brasileiros
         </p>
         <h1 class="text-3xl sm:text-5xl font-black leading-tight mb-3">
             <span class="gradient-text">Inteligência Territorial</span><br>
@@ -746,9 +746,9 @@
             <h1 class="text-4xl font-black text-white mb-3">NEXUS</h1>
             <p class="text-slate-300 text-lg mb-4">Plataforma de Inteligência Territorial para o Setor Público Brasileiro</p>
             <div class="flex justify-center gap-2 flex-wrap">
-                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">Microsoft Agents League</span>
-                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">AI Skills Fest 2026</span>
-                <span class="text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-800/50 rounded-full px-3 py-1">Deadline: 14 jun 2026</span>
+                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">Azure AI Agent Service</span>
+                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">MCP · Model Context Protocol</span>
+                <span class="text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-800/50 rounded-full px-3 py-1">Dados Abertos do Governo Federal</span>
             </div>
         </div>
 
@@ -784,14 +784,14 @@
             </div>
         </div>
 
-        <!-- Hackathon tracks -->
+        <!-- Capabilities -->
         <div class="glass rounded-2xl p-6 mb-8">
-            <h3 class="font-bold text-white text-base mb-5">Trilhas Cobertas</h3>
+            <h3 class="font-bold text-white text-base mb-5">Capacidades</h3>
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <template x-for="track in hackathonTracks" :key="track.name">
+                <template x-for="cap in capabilities" :key="cap.name">
                     <div class="rounded-xl border border-blue-500/15 bg-blue-900/5 p-4">
-                        <p class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1.5" x-text="track.icon+' '+track.name"></p>
-                        <p class="text-xs text-slate-400 leading-relaxed" x-text="track.desc"></p>
+                        <p class="text-xs font-bold text-blue-400 uppercase tracking-wider mb-1.5" x-text="cap.icon+' '+cap.name"></p>
+                        <p class="text-xs text-slate-400 leading-relaxed" x-text="cap.desc"></p>
                     </div>
                 </template>
             </div>
@@ -833,7 +833,7 @@
 <!-- FOOTER -->
 <footer class="border-t border-white/5 py-6 mt-4">
     <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-700">
-        <span>NEXUS © 2026 · Microsoft Agents League · AI Skills Fest</span>
+        <span>NEXUS © 2026 · Plataforma de Inteligência Territorial</span>
         <span>IBGE · Portal da Transparência · DATASUS · INEP — dados públicos</span>
     </div>
 </footer>
@@ -912,11 +912,11 @@ function nexus() {
             { icon:'🧪', name:'pytest-asyncio', desc:'17 testes ✓'       },
             { icon:'💻', name:'Copilot',        desc:'GitHub Copilot'    },
         ],
-        hackathonTracks: [
-            { icon:'🤖', name:'AI Agent',       desc:'Router Agent com Azure AI Agent Service e function-calling multi-turno via FunctionTool + ToolSet.' },
-            { icon:'🔗', name:'MCP',            desc:'FastAPI MCP Server com SSE transport expondo 4 ferramentas de inteligência territorial.' },
-            { icon:'💻', name:'GitHub Copilot', desc:'Código scaffolded e iterado com GitHub Copilot em modo agente.' },
-            { icon:'🛡️', name:'Responsible AI', desc:'Dados exclusivamente de APIs abertas do governo. Sem PII. Proveniência 100% transparente.' },
+        capabilities: [
+            { icon:'🤖', name:'Orquestração Multi-Agente',  desc:'Router Agent (Azure AI Agent Service) despacha agentes especializados em paralelo com function-calling multi-turno.' },
+            { icon:'🔗', name:'Protocolo MCP',              desc:'FastAPI MCP Server com transporte SSE expõe 4 ferramentas consumíveis por qualquer cliente MCP ou REST.' },
+            { icon:'🗺️', name:'Cobertura Nacional',        desc:'5.570 municípios brasileiros indexados pelo código IBGE — chave universal que vincula as três dimensões.' },
+            { icon:'🛡️', name:'Dados Abertos e Auditáveis', desc:'Todas as fontes são APIs oficiais do governo federal. Sem PII. Proveniência 100% transparente e verificável.' },
         ],
         kpis: [
             { value:'5.570', label:'Municípios cobertos' },

@@ -7,8 +7,6 @@
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Traced-F5A623?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-> **Microsoft Agents League @ AI Skills Fest 2026** — Submission
-
 NEXUS crosses Brazilian public fiscal, social, and geographic open data to deliver actionable natural-language insights for public sector decision makers — powered by Azure AI Foundry multi-agent orchestration and real government APIs.
 
 ---
@@ -226,19 +224,6 @@ Key span names:
 
 ---
 
-## Hackathon Tracks
-
-This submission targets the following **Microsoft Agents League** tracks:
-
-| Track | How NEXUS qualifies |
-|-------|---------------------|
-| **AI Agent** | Router Agent orchestrates sub-agents using Azure AI Agent Service function-calling |
-| **MCP** | FastAPI MCP server with SSE transport exposes 4 tools consumable by any MCP client |
-| **GitHub Copilot** | Codebase scaffolded and iterated with GitHub Copilot (agent mode) |
-| **Responsible AI** | All data sourced from free Brazilian government open data; no PII; transparent provenance |
-
----
-
 ## Contributing
 
 Pull requests welcome. Please open an issue first to discuss what you would like to change.
@@ -252,4 +237,3 @@ Pull requests welcome. Please open an issue first to discuss what you would like
 ---
 
 *Built with Azure AI Foundry · FastAPI · Model Context Protocol · OpenTelemetry*
-*for the Microsoft Agents League @ AI Skills Fest 2026*

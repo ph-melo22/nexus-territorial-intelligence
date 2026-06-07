@@ -96,7 +96,7 @@ async def demo_cruzamento(codigos: list[str]) -> dict:
 async def main(ibge_code: str) -> None:
     print("\n" + "=" * 60)
     print("  NEXUS - Plataforma de Inteligencia Territorial")
-    print("  Microsoft Agents League @ AI Skills Fest 2026")
+    print("  Dados Fiscais, Territoriais e Sociais do Brasil")
     print("=" * 60)
 
     # ── Demo 1: Perfil Territorial ────────────────────────────────────────────
