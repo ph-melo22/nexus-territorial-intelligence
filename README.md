@@ -87,7 +87,7 @@ Universal key: IBGE 7-digit municipality code
 ### 1. Clone & install
 
 ```bash
-git clone https://github.com/your-org/nexus-territorial-intelligence.git
+git clone https://github.com/ph-melo22/nexus-territorial-intelligence.git
 cd nexus-territorial-intelligence
 
 python -m venv venv

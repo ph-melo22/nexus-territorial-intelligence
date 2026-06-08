@@ -126,63 +126,110 @@
     <div class="max-w-2xl mx-auto px-4 sm:px-6 pb-5">
         <div class="glass rounded-2xl p-5 sm:p-7 glow-blue">
 
-            <!-- Municipality input -->
-            <div class="mb-4 relative">
-                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Município</label>
-                <div class="relative">
-                    <input x-model="muniQuery"
-                           @input.debounce.280ms="searchMuni(muniQuery,'main')"
-                           @focus="if(muniResults.length) showSugg=true"
-                           @keydown.escape="showSugg=false"
-                           @keydown.enter="muniResults.length && selectMuni(muniResults[0])"
-                           type="text" placeholder="Ex: Campinas, Fortaleza, Belém..."
-                           :class="selectedMuni?'border-emerald-600/80':'border-slate-700'"
-                           class="w-full bg-slate-800/70 border rounded-xl px-4 py-3 pr-10 text-white placeholder-slate-500 text-sm">
-                    <div x-show="muniLoading" class="absolute right-3 top-3">
-                        <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+            <!-- Mode toggle -->
+            <div class="flex rounded-xl bg-slate-800/60 p-1 mb-5 gap-1">
+                <button @click="mode='municipio'"
+                        :class="mode==='municipio'?'bg-blue-600 text-white shadow-sm':'text-slate-400 hover:text-slate-200'"
+                        class="flex-1 py-2 rounded-lg text-xs font-bold transition-all">
+                    🗺️ Por Município
+                </button>
+                <button @click="mode='livre'"
+                        :class="mode==='livre'?'bg-indigo-600 text-white shadow-sm':'text-slate-400 hover:text-slate-200'"
+                        class="flex-1 py-2 rounded-lg text-xs font-bold transition-all">
+                    🤖 Pergunta Livre
+                </button>
+            </div>
+
+            <!-- ── MODO: POR MUNICÍPIO ── -->
+            <div x-show="mode==='municipio'">
+                <!-- Municipality input -->
+                <div class="mb-4 relative">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Município</label>
+                    <div class="relative">
+                        <input x-model="muniQuery"
+                               @input.debounce.280ms="searchMuni(muniQuery,'main')"
+                               @focus="if(muniResults.length) showSugg=true"
+                               @keydown.escape="showSugg=false"
+                               @keydown.enter="muniResults.length && selectMuni(muniResults[0])"
+                               type="text" placeholder="Ex: Campinas, Fortaleza, Belém..."
+                               :class="selectedMuni?'border-emerald-600/80':'border-slate-700'"
+                               class="w-full bg-slate-800/70 border rounded-xl px-4 py-3 pr-10 text-white placeholder-slate-500 text-sm">
+                        <div x-show="muniLoading" class="absolute right-3 top-3">
+                            <div class="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                        </div>
+                        <span x-show="selectedMuni && !muniLoading" class="absolute right-3 top-3 text-emerald-400 text-sm">✓</span>
                     </div>
-                    <span x-show="selectedMuni && !muniLoading" class="absolute right-3 top-3 text-emerald-400 text-sm">✓</span>
+                    <!-- Suggestions -->
+                    <div x-show="showSugg && muniResults.length" x-cloak
+                         @click.outside="showSugg=false"
+                         class="sugg-box absolute z-50 w-full mt-1 rounded-xl overflow-hidden">
+                        <template x-for="m in muniResults" :key="m.id">
+                            <button @click="selectMuni(m); showSugg=false"
+                                    class="w-full flex items-center justify-between px-4 py-3 hover:bg-blue-600/20 transition-colors text-left">
+                                <div>
+                                    <span class="text-sm font-medium text-white" x-text="m.nome"></span>
+                                    <span class="text-xs text-slate-400 ml-1" x-text="'/ '+m.estado_nome"></span>
+                                </div>
+                                <span class="text-xs text-slate-600 font-mono" x-text="m.id"></span>
+                            </button>
+                        </template>
+                    </div>
+                </div>
+                <!-- Question -->
+                <div class="mb-5">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Pergunta <span class="normal-case font-normal text-slate-600">(opcional)</span>
+                    </label>
+                    <input x-model="question" @keydown.enter="consultar()" type="text"
+                           placeholder="Ex: Quantos estabelecimentos de saúde e qual o PIB per capita?"
+                           class="w-full bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm">
+                </div>
+                <button @click="consultar()" :disabled="!selectedMuni||loading"
+                        class="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-all
+                               bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400
+                               disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2.5">
+                    <div x-show="loading" class="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></div>
+                    <span x-text="loading?'Consultando agentes…':'Consultar →'"></span>
+                </button>
+            </div>
+
+            <!-- ── MODO: PERGUNTA LIVRE ── -->
+            <div x-show="mode==='livre'">
+                <div class="mb-3">
+                    <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
+                        Pergunta para o Router Agent
+                    </label>
+                    <textarea x-model="questionLivre"
+                              @keydown.enter.ctrl="queryLivre()"
+                              rows="3"
+                              placeholder="Ex: Compare a situação fiscal de Campinas e Fortaleza. Qual tem maior PIB per capita? Quantos hospitais cada uma tem?"
+                              class="w-full bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm resize-none"></textarea>
+                    <p class="text-xs text-slate-600 mt-1">Ctrl+Enter para enviar. Mencione os municípios pelo nome — o Router Agent resolve automaticamente.</p>
                 </div>
 
-                <!-- Suggestions -->
-                <div x-show="showSugg && muniResults.length" x-cloak
-                     @click.outside="showSugg=false"
-                     class="sugg-box absolute z-50 w-full mt-1 rounded-xl overflow-hidden">
-                    <template x-for="m in muniResults" :key="m.id">
-                        <button @click="selectMuni(m); showSugg=false"
-                                class="w-full flex items-center justify-between px-4 py-3 hover:bg-blue-600/20 transition-colors text-left">
-                            <div>
-                                <span class="text-sm font-medium text-white" x-text="m.nome"></span>
-                                <span class="text-xs text-slate-400 ml-1" x-text="'/ '+m.estado_nome"></span>
-                            </div>
-                            <span class="text-xs text-slate-600 font-mono" x-text="m.id"></span>
-                        </button>
+                <!-- Exemplos -->
+                <div class="flex flex-wrap gap-1.5 mb-5">
+                    <span class="text-xs text-slate-600">Exemplos:</span>
+                    <template x-for="ex in exemplosLivre" :key="ex">
+                        <button @click="questionLivre=ex"
+                                class="text-xs px-2.5 py-1 rounded-full border border-slate-700 text-slate-400 hover:border-indigo-500 hover:text-indigo-300 transition-all"
+                                x-text="ex"></button>
                     </template>
                 </div>
+
+                <button @click="queryLivre()" :disabled="!questionLivre.trim()||loadingLivre"
+                        class="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-all
+                               bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400
+                               disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2.5">
+                    <div x-show="loadingLivre" class="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></div>
+                    <span x-text="loadingLivre?'Router Agent processando…':'Perguntar →'"></span>
+                </button>
             </div>
 
-            <!-- Question -->
-            <div class="mb-5">
-                <label class="block text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">
-                    Pergunta <span class="normal-case font-normal text-slate-600">(opcional)</span>
-                </label>
-                <input x-model="question" @keydown.enter="consultar()" type="text"
-                       placeholder="Ex: Quantos estabelecimentos de saúde e qual o PIB per capita?"
-                       class="w-full bg-slate-800/70 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-500 text-sm">
-            </div>
-
-            <!-- CTA -->
-            <button @click="consultar()" :disabled="!selectedMuni||loading"
-                    class="w-full py-3.5 rounded-xl font-bold text-sm text-white transition-all
-                           bg-gradient-to-r from-blue-600 to-blue-500 hover:from-blue-500 hover:to-blue-400
-                           disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2.5">
-                <div x-show="loading" class="w-4 h-4 border-2 border-white/80 border-t-transparent rounded-full animate-spin"></div>
-                <span x-text="loading?'Consultando agentes…':'Consultar →'"></span>
-            </button>
         </div>
 
-        <!-- Quick chips -->
-        <div class="flex flex-wrap justify-center gap-2 mt-4">
+        <!-- Quick chips (only in municipio mode) -->
+        <div x-show="mode==='municipio'" class="flex flex-wrap justify-center gap-2 mt-4">
             <span class="text-xs text-slate-600">Acesso rápido:</span>
             <template x-for="q in quickAccess" :key="q.id">
                 <button @click="quickSelect(q)"
@@ -192,6 +239,24 @@
                         class="text-xs px-3 py-1.5 rounded-full border transition-all"
                         x-text="q.nome+'/'+q.estado"></button>
             </template>
+        </div>
+    </div>
+
+    <!-- Resposta livre (Router Agent) -->
+    <div x-show="respostaLivre" x-cloak class="max-w-3xl mx-auto px-4 sm:px-6 pb-5">
+        <div class="glass rounded-2xl p-5 slide-up">
+            <div class="flex items-center gap-2 mb-4">
+                <div class="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0">🤖</div>
+                <div>
+                    <p class="text-sm font-bold text-white">Router Agent</p>
+                    <p class="text-xs text-slate-500">Azure AI Agent Service · resposta sintetizada</p>
+                </div>
+                <button @click="respostaLivre=null; perguntaEnviada=''"
+                        class="ml-auto text-xs text-slate-600 hover:text-slate-400 transition-colors">✕ limpar</button>
+            </div>
+            <div x-show="perguntaEnviada" class="text-xs text-slate-500 mb-3 italic"
+                 x-text="'&quot;' + perguntaEnviada + '&quot;'"></div>
+            <div class="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap" x-text="respostaLivre"></div>
         </div>
     </div>
 
@@ -854,14 +919,28 @@ function nexus() {
             { id: 'sobre',     label: 'Sobre'      },
         ],
 
+        // Mode toggle
+        mode: 'municipio',
+
         // Main search
         muniQuery: '', muniResults: [], muniLoading: false,
         selectedMuni: null, showSugg: false, question: '',
 
-        // Query
+        // Query (municipio mode)
         loading: false,
         agentStatuses: { router:'idle', fiscal:'idle', territorial:'idle', social:'idle' },
         results: null,
+
+        // Query (livre mode)
+        questionLivre: '',
+        loadingLivre: false,
+        respostaLivre: null,
+        perguntaEnviada: '',
+        exemplosLivre: [
+            'Qual o PIB per capita de Campinas?',
+            'Compare Fortaleza e Recife no aspecto fiscal e social.',
+            'Quantos hospitais existem em Manaus?',
+        ],
 
         // Compare
         compareAQuery:'', compareBQuery:'',
@@ -1031,6 +1110,28 @@ function nexus() {
                 };
             } catch(e) { console.error('comparar', e); }
             finally { this.compareLoading = false; }
+        },
+
+        // ── Pergunta Livre (Router Agent) ─────────────────────────────────
+        async queryLivre() {
+            const q = this.questionLivre.trim();
+            if (!q || this.loadingLivre) return;
+            this.loadingLivre = true;
+            this.respostaLivre = null;
+            this.perguntaEnviada = q;
+            try {
+                const r = await fetch(`${this.apiBase}/v1/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ question: q }),
+                });
+                const data = await r.json();
+                this.respostaLivre = data.answer || data.erro || JSON.stringify(data);
+            } catch(e) {
+                this.respostaLivre = 'Erro ao contactar o Router Agent. Verifique se o servidor está rodando.';
+            } finally {
+                this.loadingLivre = false;
+            }
         },
 
         // ── Formatters ────────────────────────────────────────────────────
