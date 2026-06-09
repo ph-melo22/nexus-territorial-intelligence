@@ -1,17 +1,15 @@
-"""Router Agent — Azure AI Agent Service orchestrator.
+"""Router Agent — orchestrates fiscal, territorial, and social agents via GPT-4o function calling.
 
-Uses azure-ai-projects to create an Azure AI Agent that receives natural-language
-questions, plans which NEXUS tools to invoke, and returns a synthesized answer.
-
-The four NEXUS tools are registered as Azure AI FunctionTool definitions that
-call back to the running FastAPI endpoints, so the agent can invoke them
-autonomously via the Azure AI Agent runtime's function-calling loop.
+Uses the Azure AI Foundry (Nova Fábrica) endpoint + API key to obtain an
+OpenAI-compatible client, then runs a function-calling loop to answer
+natural-language questions about Brazilian municipalities.
 """
 import asyncio
 import json
 import logging
-from typing import AsyncIterator
+import re
 
+import openai
 from opentelemetry import trace
 
 from config import settings
@@ -22,156 +20,200 @@ from agents.social import SocialAgent
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 
-_SYSTEM_PROMPT = """You are NEXUS, an AI analyst specialising in Brazilian public sector data.
+_SYSTEM_PROMPT = """Você é o NEXUS, um analista de IA especializado em dados públicos brasileiros.
 
-Your role is to answer questions from government decision-makers by crossing three
-dimensions of municipal data:
+Seu papel é responder perguntas de gestores e analistas do setor público cruzando três
+dimensões de dados municipais:
 
-• Fiscal     — federal transfers, Bolsa Família, procurement (Portal da Transparência)
-• Territorial — demographics, PIB, geography (IBGE)
-• Social     — health infrastructure, education metrics (DATASUS + INEP)
+• Fiscal     — transferências federais, Bolsa Família, convênios (Portal da Transparência)
+• Territorial — demografia, PIB, geografia (IBGE)
+• Social     — infraestrutura de saúde, indicadores educacionais (DATASUS + INEP)
 
-Guidelines:
-1. Always identify the municipality and obtain its 7-digit IBGE code before querying.
-2. Use only the tools available; never invent data.
-3. Combine data from multiple dimensions when the question spans them.
-4. Present numbers with units (R$, %, inhabitants, etc.) and cite the source.
-5. Highlight disparities, risks, or opportunities grounded in the data.
-6. Reply in the same language as the question (Portuguese or English).
-7. Be concise: lead with the direct answer, then supporting evidence.
+Instruções:
+1. Identifique o município na pergunta e obtenha seu código IBGE de 7 dígitos antes de consultar.
+2. Use apenas as ferramentas disponíveis — nunca invente dados.
+3. Combine dados de múltiplas dimensões quando a pergunta exigir.
+4. Apresente números com unidades (R$, %, habitantes) e cite a fonte.
+5. Destaque disparidades, riscos ou oportunidades baseados nos dados.
+6. Responda no mesmo idioma da pergunta (português ou inglês).
+7. Seja direto: comece pela resposta, depois os dados de suporte.
 """
+
+_TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_municipio",
+            "description": "Resolve o nome de um município brasileiro para seu código IBGE de 7 dígitos.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "nome": {"type": "string", "description": "Nome do município (ex: Campinas, Fortaleza)"},
+                    "uf": {"type": "string", "description": "Sigla do estado, opcional (ex: SP, CE)"},
+                },
+                "required": ["nome"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_fiscal",
+            "description": "Busca dados fiscais de um município: Bolsa Família, transferências federais, convênios.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_ibge": {"type": "string", "description": "Código IBGE de 7 dígitos"},
+                    "ano": {"type": "integer", "description": "Ano de referência (padrão: 2024)"},
+                    "consulta": {"type": "string", "description": "Pergunta específica"},
+                },
+                "required": ["codigo_ibge"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_territorial",
+            "description": "Busca dados territoriais e demográficos: população (Censo 2022), PIB per capita, perfil geográfico.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_ibge": {"type": "string", "description": "Código IBGE de 7 dígitos"},
+                    "consulta": {"type": "string", "description": "Pergunta específica"},
+                },
+                "required": ["codigo_ibge"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buscar_social",
+            "description": "Busca dados sociais: estabelecimentos de saúde (DATASUS/CNES) e indicadores educacionais (INEP).",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigo_ibge": {"type": "string", "description": "Código IBGE de 7 dígitos"},
+                    "consulta": {"type": "string", "description": "Pergunta específica"},
+                },
+                "required": ["codigo_ibge"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "cruzar_dados",
+            "description": "Cruza dados fiscais, territoriais e sociais de um ou mais municípios para análise comparativa.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "codigos_ibge": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista de códigos IBGE de 7 dígitos",
+                    },
+                    "dimensoes": {
+                        "type": "array",
+                        "items": {"type": "string", "enum": ["fiscal", "territorial", "social"]},
+                        "description": "Dimensões a cruzar (padrão: todas)",
+                    },
+                    "consulta": {"type": "string", "description": "Pergunta ou hipótese a investigar"},
+                },
+                "required": ["codigos_ibge", "consulta"],
+            },
+        },
+    },
+]
 
 
 class RouterAgent:
-    """High-level orchestrator that delegates to fiscal, territorial, and social agents."""
-
     def __init__(self) -> None:
         self._fiscal = FiscalAgent()
         self._territorial = TerritorialAgent()
         self._social = SocialAgent()
-        self._azure_agent_id: str | None = None
+        self._openai_client: openai.OpenAI | None = None
 
-    # ── Azure AI Agent Service integration ────────────────────────────────────
+    def _get_client(self) -> openai.OpenAI | None:
+        if not settings.AZURE_AI_PROJECT_ENDPOINT or not settings.AZURE_AI_API_KEY:
+            return None
+        if self._openai_client is None:
+            base_url = settings.AZURE_AI_PROJECT_ENDPOINT.rstrip("/") + "/openai/v1/"
+            self._openai_client = openai.OpenAI(
+                base_url=base_url,
+                api_key=settings.AZURE_AI_API_KEY,
+            )
+        return self._openai_client
 
-    def _build_tool_definitions(self) -> list[dict]:
-        """Return OpenAI-compatible function definitions for the four NEXUS tools."""
-        return [
-            {
-                "type": "function",
-                "function": {
-                    "name": "buscar_fiscal",
-                    "description": (
-                        "Search fiscal/budgetary data for a Brazilian municipality: "
-                        "Bolsa Família beneficiaries, federal transfers, grants."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "codigo_ibge": {"type": "string", "description": "7-digit IBGE municipality code"},
-                            "ano": {"type": "integer", "description": "Reference year (default 2024)"},
-                            "consulta": {"type": "string", "description": "Specific sub-question"},
-                        },
-                        "required": ["codigo_ibge"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "buscar_territorial",
-                    "description": (
-                        "Search territorial/demographic data for a Brazilian municipality: "
-                        "population, area, PIB, geographic profile."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "codigo_ibge": {"type": "string", "description": "7-digit IBGE municipality code"},
-                            "consulta": {"type": "string", "description": "Specific sub-question"},
-                        },
-                        "required": ["codigo_ibge"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "buscar_social",
-                    "description": (
-                        "Search social data for a Brazilian municipality: "
-                        "health establishments, professionals (DATASUS/CNES), "
-                        "school enrollments and teachers (INEP/Censo Escolar)."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "codigo_ibge": {"type": "string", "description": "7-digit IBGE municipality code"},
-                            "consulta": {"type": "string", "description": "Specific sub-question"},
-                        },
-                        "required": ["codigo_ibge"],
-                    },
-                },
-            },
-            {
-                "type": "function",
-                "function": {
-                    "name": "cruzar_dados",
-                    "description": (
-                        "Cross-reference fiscal, territorial, and social data for one or more "
-                        "Brazilian municipalities. Returns a comparative multi-dimensional analysis."
-                    ),
-                    "parameters": {
-                        "type": "object",
-                        "properties": {
-                            "codigos_ibge": {
-                                "type": "array",
-                                "items": {"type": "string"},
-                                "description": "List of 7-digit IBGE codes",
-                            },
-                            "dimensoes": {
-                                "type": "array",
-                                "items": {"type": "string", "enum": ["fiscal", "territorial", "social"]},
-                                "description": "Dimensions to cross (default: all three)",
-                            },
-                            "consulta": {"type": "string", "description": "Question or hypothesis to investigate"},
-                        },
-                        "required": ["codigos_ibge", "consulta"],
-                    },
-                },
-            },
-        ]
-
-    async def _execute_tool_call(self, name: str, arguments: dict) -> str:
-        """Execute a tool call dispatched by the Azure AI Agent."""
-        with tracer.start_as_current_span(f"router.tool_call.{name}") as span:
+    async def _execute_tool(self, name: str, arguments: dict) -> str:
+        with tracer.start_as_current_span(f"router.tool.{name}") as span:
             span.set_attribute("tool.name", name)
             try:
-                if name == "buscar_fiscal":
-                    result = await self._fiscal.run(**arguments)
+                if name == "buscar_municipio":
+                    result = await self._resolve_municipio(
+                        arguments["nome"], arguments.get("uf", "")
+                    )
+                elif name == "buscar_fiscal":
+                    result = await self._fiscal.run(
+                        codigo_ibge=arguments["codigo_ibge"],
+                        ano=arguments.get("ano", 2024),
+                        consulta=arguments.get("consulta", ""),
+                    )
                 elif name == "buscar_territorial":
-                    result = await self._territorial.run(**arguments)
+                    result = await self._territorial.run(
+                        codigo_ibge=arguments["codigo_ibge"],
+                        consulta=arguments.get("consulta", ""),
+                    )
                 elif name == "buscar_social":
-                    result = await self._social.run(**arguments)
+                    result = await self._social.run(
+                        codigo_ibge=arguments["codigo_ibge"],
+                        consulta=arguments.get("consulta", ""),
+                    )
                 elif name == "cruzar_dados":
-                    result = await self._cruzar_dados(**arguments)
+                    result = await self._cruzar_dados(
+                        codigos_ibge=arguments["codigos_ibge"],
+                        dimensoes=arguments.get("dimensoes", ["fiscal", "territorial", "social"]),
+                        consulta=arguments.get("consulta", ""),
+                    )
                 else:
-                    result = {"erro": f"Unknown tool: {name}"}
+                    result = {"erro": f"Ferramenta desconhecida: {name}"}
                 return json.dumps(result, ensure_ascii=False, default=str)
             except Exception as e:
-                logger.error(f"Tool call {name} failed: {e}")
+                logger.error(f"Tool {name} error: {e}")
                 return json.dumps({"erro": str(e)})
+
+    async def _resolve_municipio(self, nome: str, uf: str = "") -> dict:
+        import httpx
+        async with httpx.AsyncClient(timeout=10) as c:
+            r = await c.get(
+                "https://servicodados.ibge.gov.br/api/v1/localidades/municipios",
+                params={"nome": nome},
+            )
+            r.raise_for_status()
+            data = r.json()
+
+        results = []
+        for m in data[:5]:
+            try:
+                uf_sigla = m["microrregiao"]["mesorregiao"]["UF"]["sigla"]
+                if uf and uf_sigla.upper() != uf.upper():
+                    continue
+                results.append({"codigo_ibge": str(m["id"]), "nome": m["nome"], "uf": uf_sigla})
+            except (KeyError, TypeError):
+                pass
+
+        if not results:
+            return {"erro": f"Município '{nome}' não encontrado"}
+        return {"municipios": results, "principal": results[0]}
 
     async def _cruzar_dados(
         self,
         codigos_ibge: list[str],
-        dimensoes: list[str] | None = None,
-        consulta: str = "",
+        dimensoes: list[str],
+        consulta: str,
     ) -> dict:
-        if dimensoes is None:
-            dimensoes = ["fiscal", "territorial", "social"]
-
-        tasks = []
-        labels = []
+        tasks, labels = [], []
         for codigo in codigos_ibge:
             if "fiscal" in dimensoes:
                 tasks.append(self._fiscal.run(codigo_ibge=codigo, consulta=consulta))
@@ -184,138 +226,95 @@ class RouterAgent:
                 labels.append((codigo, "social"))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
-
         municipios: dict[str, dict] = {}
         for (codigo, dim), res in zip(labels, results):
-            if codigo not in municipios:
-                municipios[codigo] = {}
-            municipios[codigo][dim] = (
+            municipios.setdefault(codigo, {})[dim] = (
                 res if not isinstance(res, Exception) else {"erro": str(res)}
             )
-
-        return {
-            "consulta": consulta,
-            "municipios": municipios,
-            "dimensoes_analisadas": dimensoes,
-        }
-
-    # ── Azure AI Agent run loop ────────────────────────────────────────────────
+        return {"consulta": consulta, "municipios": municipios, "dimensoes": dimensoes}
 
     async def run_with_azure_agent(self, question: str) -> str:
-        """Run the question through the Azure AI Agent Service (requires valid config)."""
-        if not settings.AZURE_AI_PROJECT_CONNECTION_STRING:
-            logger.warning("Azure AI Project not configured; falling back to direct dispatch.")
+        client = self._get_client()
+        if client is None:
+            logger.warning("Azure AI não configurado — usando fallback direto.")
             return await self._direct_dispatch(question)
 
-        try:
-            from azure.ai.projects import AIProjectClient
-            from azure.ai.projects.models import FunctionTool, ToolSet
-            from azure.identity import DefaultAzureCredential
+        with tracer.start_as_current_span("router.gpt4o_run") as span:
+            span.set_attribute("question_len", len(question))
+            messages: list[dict] = [
+                {"role": "system", "content": _SYSTEM_PROMPT},
+                {"role": "user", "content": question},
+            ]
 
-            client = AIProjectClient.from_connection_string(
-                credential=DefaultAzureCredential(),
-                conn_str=settings.AZURE_AI_PROJECT_CONNECTION_STRING,
-            )
+            try:
+                for _ in range(8):  # max 8 turns
+                    response = await asyncio.get_event_loop().run_in_executor(
+                        None,
+                        lambda msgs=messages: client.chat.completions.create(
+                            model=settings.AZURE_OPENAI_DEPLOYMENT,
+                            messages=msgs,
+                            tools=_TOOLS,
+                            tool_choice="auto",
+                            max_tokens=2048,
+                        ),
+                    )
 
-            # Define tools using the SDK's FunctionTool wrapper
-            functions = FunctionTool(functions={
-                self.buscar_fiscal_fn,
-                self.buscar_territorial_fn,
-                self.buscar_social_fn,
-                self.cruzar_dados_fn,
-            })
-            toolset = ToolSet()
-            toolset.add(functions)
+                    msg = response.choices[0].message
+                    messages.append(msg.model_dump(exclude_unset=False))
 
-            with tracer.start_as_current_span("router.azure_agent_run") as span:
-                agent = client.agents.create_agent(
-                    model=settings.AZURE_OPENAI_DEPLOYMENT,
-                    name="nexus-router",
-                    instructions=_SYSTEM_PROMPT,
-                    toolset=toolset,
-                )
-                span.set_attribute("azure.agent_id", agent.id)
+                    if not msg.tool_calls:
+                        return msg.content or "Não foi possível gerar uma resposta."
 
-                thread = client.agents.create_thread()
-                client.agents.create_message(
-                    thread_id=thread.id,
-                    role="user",
-                    content=question,
-                )
+                    tool_results = await asyncio.gather(*[
+                        self._execute_tool(tc.function.name, json.loads(tc.function.arguments))
+                        for tc in msg.tool_calls
+                    ])
 
-                run = client.agents.create_and_process_run(
-                    thread_id=thread.id,
-                    agent_id=agent.id,
-                    toolset=toolset,
-                )
+                    for tc, result in zip(msg.tool_calls, tool_results):
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tc.id,
+                            "content": result,
+                        })
 
-                messages = client.agents.list_messages(thread_id=thread.id)
-                for msg in messages:
-                    if msg.role == "assistant":
-                        return msg.content[0].text.value if msg.content else ""
+                return "Limite de iterações atingido sem resposta final."
 
-                return "Não foi possível gerar uma resposta."
-
-        except ImportError:
-            logger.warning("azure-ai-projects not installed; falling back to direct dispatch.")
-            return await self._direct_dispatch(question)
-        except Exception as e:
-            logger.error(f"Azure Agent run failed: {e}")
-            return await self._direct_dispatch(question)
+            except openai.NotFoundError:
+                logger.error("GPT-4o deployment not found — deploy it in Azure AI Foundry first.")
+                return await self._direct_dispatch(question)
+            except Exception as e:
+                logger.error(f"Azure GPT-4o error: {e}")
+                return await self._direct_dispatch(question)
 
     async def _direct_dispatch(self, question: str) -> str:
-        """Minimal fallback: extract IBGE code from question and cross all dimensions."""
+        """Fallback: tenta resolver município pelo nome e cruza todas as dimensões."""
         with tracer.start_as_current_span("router.direct_dispatch"):
-            logger.info(f"Direct dispatch for: {question[:80]}")
-            # Heuristic: look for 7-digit number in the question
-            import re
             codes = re.findall(r"\b\d{7}\b", question)
+
+            if not codes:
+                words = [w.strip(".,?!") for w in question.split() if len(w) > 3]
+                for word in words:
+                    try:
+                        resolved = await self._resolve_municipio(word)
+                        if "principal" in resolved:
+                            codes = [resolved["principal"]["codigo_ibge"]]
+                            break
+                    except Exception:
+                        continue
+
             if not codes:
                 return (
-                    "Para responder, preciso do código IBGE de 7 dígitos do município. "
-                    "Exemplo: 3550308 (São Paulo/SP)."
+                    "Para responder, preciso identificar o município na pergunta. "
+                    "Tente mencionar o nome completo (ex: 'Campinas', 'Fortaleza') "
+                    "ou o código IBGE de 7 dígitos."
                 )
+
             result = await self._cruzar_dados(
-                codigos_ibge=codes,
+                codigos_ibge=codes[:2],
                 dimensoes=["fiscal", "territorial", "social"],
                 consulta=question,
             )
             return json.dumps(result, ensure_ascii=False, default=str, indent=2)
-
-    # ── Syncable tool functions (used by Azure AI FunctionTool) ───────────────
-
-    def buscar_fiscal_fn(self, codigo_ibge: str, ano: int = 2024, consulta: str = "") -> str:
-        """Search fiscal data for a municipality (Bolsa Família, transfers, grants)."""
-        return asyncio.run(
-            self._fiscal.run(codigo_ibge=codigo_ibge, ano=ano, consulta=consulta)
-        )
-
-    def buscar_territorial_fn(self, codigo_ibge: str, consulta: str = "") -> str:
-        """Search territorial/demographic data for a municipality."""
-        return asyncio.run(
-            self._territorial.run(codigo_ibge=codigo_ibge, consulta=consulta)
-        )
-
-    def buscar_social_fn(self, codigo_ibge: str, consulta: str = "") -> str:
-        """Search social data (health + education) for a municipality."""
-        return asyncio.run(
-            self._social.run(codigo_ibge=codigo_ibge, consulta=consulta)
-        )
-
-    def cruzar_dados_fn(
-        self,
-        codigos_ibge: list[str],
-        consulta: str,
-        dimensoes: list[str] | None = None,
-    ) -> str:
-        """Cross-reference data across dimensions for one or more municipalities."""
-        return asyncio.run(
-            self._cruzar_dados(
-                codigos_ibge=codigos_ibge,
-                dimensoes=dimensoes,
-                consulta=consulta,
-            )
-        )
 
     async def aclose(self) -> None:
         await asyncio.gather(

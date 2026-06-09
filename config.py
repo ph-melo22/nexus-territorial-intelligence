@@ -9,10 +9,13 @@ class Settings(BaseSettings):
     DEBUG: bool = False
     LOG_LEVEL: str = "INFO"
 
-    # Azure AI Foundry
-    AZURE_AI_PROJECT_CONNECTION_STRING: str = ""
+    # Azure AI Foundry (Nova Fábrica — endpoint + key)
+    AZURE_AI_PROJECT_ENDPOINT: str = ""
+    AZURE_AI_API_KEY: str = ""
     AZURE_OPENAI_DEPLOYMENT: str = "gpt-4o"
-    AZURE_OPENAI_API_VERSION: str = "2024-05-01-preview"
+
+    # Legacy — kept for backwards compat, unused when endpoint is set
+    AZURE_AI_PROJECT_CONNECTION_STRING: str = ""
 
     # Portal da Transparência
     # Free key: https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email
