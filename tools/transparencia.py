@@ -34,11 +34,10 @@ class TransparenciaClient:
 
     @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=1, max=8))
     async def _get(self, path: str, **params) -> Any:
-        # Remove None values
         params = {k: v for k, v in params.items() if v is not None}
         resp = await self._http.get(path, params=params)
-        if resp.status_code == 401:
-            logger.warning("Portal da Transparência: API key missing or invalid")
+        if resp.status_code in (400, 401, 403):
+            logger.warning(f"Portal da Transparência: HTTP {resp.status_code} on {path}")
             return []
         resp.raise_for_status()
         return resp.json()
@@ -53,8 +52,8 @@ class TransparenciaClient:
             span.set_attribute("ibge.code", ibge_code)
             mes_ano = f"{ano}{mes:02d}"
             data = await self._get(
-                "/bolsa-familia-por-municipio",
-                mesAnoCompetencia=mes_ano,
+                "/novo-bolsa-familia-por-municipio",
+                mesAno=mes_ano,
                 codigoIbge=ibge_code,
                 pagina=1,
             )

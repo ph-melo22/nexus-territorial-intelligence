@@ -1,4 +1,4 @@
-# NEXUS — Territorial Intelligence Platform
+# NEXUS — Plataforma de Inteligência Territorial
 
 [![Python](https://img.shields.io/badge/Python-3.12+-3776AB?logo=python&logoColor=white)](https://python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
@@ -7,84 +7,127 @@
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Traced-F5A623?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
-NEXUS crosses Brazilian public fiscal, social, and geographic open data to deliver actionable natural-language insights for public sector decision makers — powered by Azure AI Foundry multi-agent orchestration and real government APIs.
+---
+
+## O Problema
+
+O Brasil tem **5.570 municípios**. O governo federal transfere mais de **R$ 1 trilhão por ano** através de programas como Bolsa Família, convênios, FPM e transferências diretas. Cada município, além disso, carrega um perfil único de saúde pública, educação, demografia e capacidade econômica.
+
+O problema: **nenhum gestor público consegue enxergar tudo isso ao mesmo tempo.**
+
+Os dados existem — e são públicos — mas estão espalhados em silos:
+
+| Silo | Onde está | Barreira |
+|------|-----------|----------|
+| Fiscal | Portal da Transparência | API técnica, sem linguagem natural |
+| Territorial | IBGE Localidades + SIDRA | Múltiplos endpoints, codificação específica |
+| Saúde | DATASUS / CNES | API fragmentada, sem consolidação |
+| Educação | INEP | Apenas arquivos XLSX, sem API REST |
+
+Um gestor municipal que quer responder **"como estamos em saúde comparado ao Nordeste?"** hoje precisa: navegar quatro portais diferentes, baixar planilhas, cruzar códigos IBGE, e ainda assim não terá uma resposta consolidada.
+
+Decisões de política pública são tomadas **no escuro** — não por falta de dados, mas por falta de acesso inteligente a eles.
 
 ---
 
-## Why / How / What
+## A Solução
 
-### WHY
-Brazilian municipalities manage billions in federal transfers with limited capacity to connect fiscal, social, and territorial data. Decisions are made in silos. NEXUS breaks those silos.
+**NEXUS** é uma plataforma multi-agente de inteligência territorial que transforma dados públicos brasileiros em respostas em linguagem natural para gestores e analistas do setor público.
 
-### HOW
-A Router Agent (Azure AI Agent Service) receives a natural-language question, decomposes it, and dispatches specialized sub-agents that query real Brazilian government APIs concurrently. The results are cross-referenced and surfaced as a synthesized narrative — in Portuguese or English.
+Uma pergunta como:
 
-### WHAT
-A FastAPI MCP server exposing four tools that span three dimensions of public intelligence: **fiscal** (where the money goes), **territorial** (who lives where and at what cost), and **social** (how people live). Any AI client that speaks MCP or REST can consume it.
+> *"Compare Fortaleza e Campinas em transferências federais, infraestrutura de saúde e tamanho populacional"*
 
----
+...dispara automaticamente três agentes especializados em paralelo, que consultam APIs reais do governo, cruzam os dados e entregam uma análise sintetizada — em segundos.
 
-## Architecture
+### Como funciona
 
 ```
-User / AI Client
-       │
-       ▼
- ┌─────────────────────────────────────────────────┐
- │          FastAPI MCP Server  :8000              │
- │  GET /sse  ·  POST /messages  (MCP/SSE)         │
- │  POST /v1/{buscar_fiscal|territorial|social|    │
- │             cruzar_dados}    (REST)             │
- │  POST /v1/query              (NL entry point)   │
- └──────────────┬──────────────────────────────────┘
-                │
-                ▼
-      ┌─────────────────┐
-      │  Router Agent   │  ← Azure AI Agent Service (gpt-4o)
-      │  agents/router  │    + function-calling loop
-      └────────┬────────┘
-               │ dispatches to
-   ┌───────────┼───────────┐
-   ▼           ▼           ▼
-┌──────┐  ┌──────────┐  ┌────────┐
-│Fiscal│  │Territorial│  │ Social │
-│Agent │  │  Agent    │  │ Agent  │
-└──┬───┘  └─────┬─────┘  └───┬────┘
-   │             │             │
-   ▼             ▼             ▼
-transparencia  ibge.py    datasus.py
-   .py                    inep.py
-
-Universal key: IBGE 7-digit municipality code
+Gestor / Analista / Sistema
+          │
+          ▼
+   POST /v1/query
+   {"question": "..."}
+          │
+          ▼
+  ┌───────────────────┐
+  │   Router Agent    │  ← Azure AI Foundry (GPT-4o)
+  │   GPT-4o + tools  │    decompõe a pergunta e
+  └────────┬──────────┘    decide quais dados buscar
+           │ despacha em paralelo
+  ┌────────┼────────┐
+  ▼        ▼        ▼
+Fiscal  Territorial  Social
+Agent     Agent      Agent
+  │          │          │
+  ▼          ▼          ▼
+Portal    IBGE       DATASUS
+Transpar. SIDRA      + INEP
 ```
+
+### Três dimensões integradas
+
+| Dimensão | O que entrega | Fonte |
+|----------|---------------|-------|
+| **Fiscal** | Bolsa Família, transferências federais, convênios, licitações | Portal da Transparência |
+| **Territorial** | População (Censo 2022), PIB per capita, perfil geográfico, região | IBGE Localidades + SIDRA |
+| **Social** | Estabelecimentos e profissionais de saúde, links IDEB, matrículas | DATASUS/CNES + INEP |
+
+### Por que isso importa
+
+- **5.570 municípios** acessíveis pelo nome ou código IBGE
+- **Linguagem natural** — sem necessidade de saber qual API chamar
+- **Dados reais** de APIs governamentais ativas, não simulados
+- **MCP-nativo** — qualquer cliente AI (Claude, Copilot, agentes customizados) pode consumir via protocolo padrão
+- **Tempo real** — dados buscados na hora, não em batch
 
 ---
 
-## Data Sources
+## Arquitetura
 
-| Dimension | Source | API / Endpoint | Auth |
-|-----------|--------|---------------|------|
-| Fiscal | Portal da Transparência | `api.portaldatransparencia.gov.br/api-de-dados` | Free API key |
-| Fiscal | Portal da Transparência | Bolsa Família, Transferências, Convênios | Free API key |
-| Territorial | IBGE Localidades | `servicodados.ibge.gov.br/api/v1/localidades` | None |
-| Territorial | IBGE SIDRA | Population, PIB per capita | None |
-| Social | CNES / Min. Saúde | `apidadosabertos.saude.gov.br/v1/cnes` | None |
-| Social | OpenDATASUS | `opendatasus.saude.gov.br/api/3/action` | None |
-| Social | INEP / IBGE SIDRA | School enrollments, teachers | None |
-| Social | INEP Open Data | IDEB microdata (Excel files) | None |
+```
+Usuário / Cliente AI
+        │
+        ▼
+┌──────────────────────────────────────────────────┐
+│           FastAPI MCP Server  :8000              │
+│  GET /sse  ·  POST /messages      (MCP/SSE)      │
+│  POST /v1/{fiscal|territorial|social|cruzar}     │
+│  POST /v1/query                   (NL)           │
+│  GET  /v1/municipios/buscar       (search)       │
+│  GET  /                           (frontend)     │
+└──────────────┬───────────────────────────────────┘
+               │
+               ▼
+     ┌─────────────────┐
+     │  Router Agent   │  ← Azure AI Agent Service (GPT-4o)
+     │  agents/router  │    function-calling loop
+     └────────┬────────┘
+              │
+  ┌───────────┼───────────┐
+  ▼           ▼           ▼
+┌──────┐ ┌──────────┐ ┌────────┐
+│Fiscal│ │Territorial│ │ Social │
+│Agent │ │  Agent   │ │ Agent  │
+└──┬───┘ └────┬─────┘ └───┬────┘
+   │           │            │
+   ▼           ▼            ▼
+transparencia ibge.py   datasus.py
+   .py                  inep.py
 
-> **Municipality universal key**: All data is keyed by the 7-digit IBGE municipality code (e.g. `3550308` for São Paulo/SP).
+Chave universal: código IBGE de 7 dígitos
+```
 
 ---
 
 ## Quick Start
 
-### Prerequisites
+### Pré-requisitos
 - Python 3.12+
-- [Portal da Transparência API key](https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email) (free)
-- Azure subscription with Azure AI Foundry project (optional — for Router Agent)
+- [Chave API do Portal da Transparência](https://portaldatransparencia.gov.br/api-de-dados/cadastrar-email) (gratuita)
+- Projeto Azure AI Foundry (opcional — necessário para síntese em linguagem natural via GPT-4o)
 
-### 1. Clone & install
+### 1. Clonar e instalar
 
 ```bash
 git clone https://github.com/ph-melo22/nexus-territorial-intelligence.git
@@ -99,47 +142,48 @@ source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. Configure
+### 2. Configurar
 
 ```bash
 cp .env.example .env
-# Edit .env — minimum required: TRANSPARENCIA_API_KEY
+# Editar .env — mínimo necessário: TRANSPARENCIA_API_KEY
 ```
 
-### 3. Run
+### 3. Rodar
 
 ```bash
-python main.py
-# or
+make dev
+# ou
 uvicorn main:app --reload
 ```
 
-Server starts at `http://localhost:8000`.
+Servidor em `http://localhost:8000`. Frontend acessível na raiz.
+
+### Docker
+
+```bash
+docker-compose up --build
+```
 
 ---
 
-## API Reference
+## Referência da API
 
 ### Health
 
 ```
 GET /health
+→ {"status": "ok", "service": "nexus-mcp", "version": "1.0.0", "mcp_enabled": true}
 ```
 
-```json
-{"status": "ok", "service": "nexus-mcp", "version": "1.0.0", "mcp_enabled": true}
-```
-
-### Natural Language Query
+### Consulta em linguagem natural
 
 ```
 POST /v1/query
-{"question": "Qual o total de transferências federais para Campinas em 2023?"}
+{"question": "Quanto Campinas recebeu de Bolsa Família em 2024?"}
 ```
 
-### Tool Endpoints
-
-All tools accept JSON bodies; `codigo_ibge` is always required.
+### Ferramentas individuais
 
 ```
 POST /v1/buscar_fiscal
@@ -153,22 +197,28 @@ POST /v1/buscar_social
 
 POST /v1/cruzar_dados
 {
-  "codigos_ibge": ["3509502", "3550308"],
+  "codigos_ibge": ["3509502", "2304400"],
   "dimensoes": ["fiscal", "territorial", "social"],
-  "consulta": "Compare Campinas e São Paulo em investimento social per capita"
+  "consulta": "Compare Campinas e Fortaleza em investimento social per capita"
 }
 ```
 
-### MCP Transport (SSE)
+### Busca de municípios
 
 ```
-GET  /sse       ← SSE connection (MCP clients)
-POST /messages  ← JSON-RPC messages
+GET /v1/municipios/buscar?nome=campinas&uf=SP&limit=5
+```
+
+### MCP (SSE)
+
+```
+GET  /sse       ← conexão SSE para clientes MCP
+POST /messages  ← mensagens JSON-RPC
 ```
 
 ---
 
-## Example Queries
+## Exemplos de uso
 
 ```
 "Quanto Manaus recebeu de Bolsa Família em 2024?"
@@ -180,60 +230,73 @@ POST /messages  ← JSON-RPC messages
 "Quantos hospitais existem em Fortaleza?"
 → buscar_social(2304400)
 
-"Compare os municípios do Nordeste com menor IDH no eixo fiscal e social"
-→ cruzar_dados([...], ["fiscal","social"], consulta="...")
+"Compare Campinas e São Paulo em saúde e capacidade fiscal"
+→ cruzar_dados(["3509502","3550308"], ["fiscal","social"], consulta="...")
 ```
 
 ---
 
-## Project Structure
+## Fontes de dados
+
+| Dimensão | Fonte | Endpoint | Auth |
+|----------|-------|----------|------|
+| Fiscal | Portal da Transparência | `api.portaldatransparencia.gov.br/api-de-dados` | Chave gratuita |
+| Territorial | IBGE Localidades | `servicodados.ibge.gov.br/api/v1/localidades` | Nenhuma |
+| Territorial | IBGE SIDRA | População Censo 2022, PIB per capita 2021 | Nenhuma |
+| Social | CNES / Min. Saúde | `apidadosabertos.saude.gov.br/v1/cnes` | Nenhuma |
+| Social | OpenDATASUS | `opendatasus.saude.gov.br/api/3/action` | Nenhuma |
+| Social | INEP Dados Abertos | IDEB, Censo Escolar (XLSX) | Nenhuma |
+
+---
+
+## Estrutura do projeto
 
 ```
 nexus-territorial-intelligence/
-├── main.py                  # FastAPI MCP server + REST endpoints
-├── config.py                # Pydantic settings (env-driven)
+├── main.py                  # FastAPI MCP server + endpoints REST
+├── config.py                # Configurações via variáveis de ambiente
 ├── requirements.txt
 ├── .env.example
+├── Dockerfile
+├── docker-compose.yml
 │
 ├── agents/
-│   ├── __init__.py
-│   ├── router.py            # Router Agent (Azure AI Agent Service)
-│   ├── fiscal.py            # Fiscal Agent
-│   ├── territorial.py       # Territorial Agent
-│   └── social.py            # Social Agent (health + education)
+│   ├── router.py            # Router Agent (Azure AI Foundry)
+│   ├── fiscal.py            # Agente Fiscal
+│   ├── territorial.py       # Agente Territorial
+│   └── social.py            # Agente Social (saúde + educação)
 │
-└── tools/
-    ├── __init__.py
-    ├── ibge.py              # IBGE Localidades + SIDRA client
-    ├── transparencia.py     # Portal da Transparência client
-    ├── datasus.py           # DATASUS / Ministério da Saúde client
-    └── inep.py              # INEP education data client
+├── tools/
+│   ├── ibge.py              # IBGE Localidades + SIDRA
+│   ├── transparencia.py     # Portal da Transparência
+│   ├── datasus.py           # DATASUS / CNES
+│   └── inep.py              # INEP educação
+│
+├── frontend/
+│   └── index.html           # SPA (Alpine.js + Tailwind)
+│
+└── tests/
+    └── test_tools.py        # 17 testes de integração
 ```
 
 ---
 
-## Observability
+## Observabilidade
 
-NEXUS instruments every agent run and tool call with **OpenTelemetry** spans. Set `OTLP_ENDPOINT` in `.env` to ship traces to Azure Monitor (Application Insights), Jaeger, or any OTLP-compatible backend.
+Cada execução de agente e chamada de ferramenta é instrumentada com **OpenTelemetry**. Configure `OTLP_ENDPOINT` no `.env` para enviar traces ao Azure Monitor (Application Insights) ou qualquer backend OTLP.
 
-Key span names:
+Spans principais:
 - `agent.fiscal` / `agent.territorial` / `agent.social`
-- `ibge.get_perfil_completo`, `transparencia.perfil_fiscal`, etc.
+- `ibge.get_perfil_completo`, `transparencia.perfil_fiscal`
 - `mcp.tool.{name}`, `rest.{name}`
 - `router.azure_agent_run`
 
 ---
 
-## Contributing
-
-Pull requests welcome. Please open an issue first to discuss what you would like to change.
-
----
-
-## License
+## Licença
 
 [MIT](LICENSE)
 
 ---
 
-*Built with Azure AI Foundry · FastAPI · Model Context Protocol · OpenTelemetry*
+*Construído com Azure AI Foundry · FastAPI · Model Context Protocol · OpenTelemetry*
