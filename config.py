@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     AZURE_AI_API_KEY: str = ""
     AZURE_OPENAI_DEPLOYMENT: str = "gpt-4o"
 
+    # GitHub Models fallback (free, same OpenAI API format)
+    GITHUB_TOKEN: str = ""
+    GITHUB_MODEL: str = "gpt-4o"
+
     # Legacy — kept for backwards compat, unused when endpoint is set
     AZURE_AI_PROJECT_CONNECTION_STRING: str = ""
 

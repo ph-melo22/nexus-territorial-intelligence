@@ -136,15 +136,29 @@ class RouterAgent:
         self._openai_client: openai.OpenAI | None = None
 
     def _get_client(self) -> openai.OpenAI | None:
-        if not settings.AZURE_AI_PROJECT_ENDPOINT or not settings.AZURE_AI_API_KEY:
-            return None
-        if self._openai_client is None:
+        if self._openai_client is not None:
+            return self._openai_client
+
+        # Priority 1: Azure AI Foundry (Nova Fábrica)
+        if settings.AZURE_AI_PROJECT_ENDPOINT and settings.AZURE_AI_API_KEY:
             base_url = settings.AZURE_AI_PROJECT_ENDPOINT.rstrip("/") + "/openai/v1/"
             self._openai_client = openai.OpenAI(
                 base_url=base_url,
                 api_key=settings.AZURE_AI_API_KEY,
             )
-        return self._openai_client
+            logger.info("LLM: Azure AI Foundry")
+            return self._openai_client
+
+        # Priority 2: GitHub Models (free, same OpenAI API format)
+        if settings.GITHUB_TOKEN:
+            self._openai_client = openai.OpenAI(
+                base_url="https://models.inference.ai.azure.com",
+                api_key=settings.GITHUB_TOKEN,
+            )
+            logger.info("LLM: GitHub Models")
+            return self._openai_client
+
+        return None
 
     async def _execute_tool(self, name: str, arguments: dict) -> str:
         with tracer.start_as_current_span(f"router.tool.{name}") as span:
@@ -251,7 +265,7 @@ class RouterAgent:
                     response = await asyncio.get_event_loop().run_in_executor(
                         None,
                         lambda msgs=messages: client.chat.completions.create(
-                            model=settings.AZURE_OPENAI_DEPLOYMENT,
+                            model=settings.GITHUB_MODEL if settings.GITHUB_TOKEN and not settings.AZURE_AI_PROJECT_ENDPOINT else settings.AZURE_OPENAI_DEPLOYMENT,
                             messages=msgs,
                             tools=_TOOLS,
                             tool_choice="auto",
