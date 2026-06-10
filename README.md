@@ -6,6 +6,9 @@
 [![MCP](https://img.shields.io/badge/MCP-1.9+-6C3483?logo=anthropic&logoColor=white)](https://modelcontextprotocol.io)
 [![OpenTelemetry](https://img.shields.io/badge/OpenTelemetry-Traced-F5A623?logo=opentelemetry&logoColor=white)](https://opentelemetry.io)
 [![License: MIT](https://img.shields.io/badge/License-MIT-green)](LICENSE)
+[![Deploy](https://img.shields.io/badge/Deploy-Railway-7B2FBE?logo=railway&logoColor=white)](https://nexus-territorial-intelligence-production.up.railway.app)
+
+**Live demo:** https://nexus-territorial-intelligence-production.up.railway.app
 
 ---
 
