@@ -17,6 +17,7 @@
         tailwind.config = { darkMode: 'class' }
     </script>
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked@12.0.0/marked.min.js"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -72,6 +73,17 @@
         ::-webkit-scrollbar { width:5px; height:5px; }
         ::-webkit-scrollbar-track { background:#0f172a; }
         ::-webkit-scrollbar-thumb { background:#334155; border-radius:3px; }
+
+        /* Markdown prose styles */
+        .md-body h1,.md-body h2,.md-body h3 { color:#f1f5f9; font-weight:700; margin:0.75em 0 0.4em; }
+        .md-body h1 { font-size:1.1rem; } .md-body h2 { font-size:1rem; } .md-body h3 { font-size:.9rem; }
+        .md-body p { margin:0.4em 0; }
+        .md-body strong { color:#e2e8f0; font-weight:700; }
+        .md-body ul,.md-body ol { padding-left:1.4em; margin:0.4em 0; }
+        .md-body li { margin:0.2em 0; }
+        .md-body code { background:#1e293b; color:#7dd3fc; padding:0.1em 0.35em; border-radius:4px; font-size:.82em; }
+        .md-body pre { background:#1e293b; padding:.75em 1em; border-radius:.5em; overflow-x:auto; margin:.5em 0; }
+        .md-body pre code { background:none; padding:0; color:#94a3b8; }
     </style>
 </head>
 <body class="text-slate-100 min-h-screen" x-data="nexus()" x-init="init()">
@@ -256,14 +268,14 @@
                 <div class="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0">🤖</div>
                 <div>
                     <p class="text-sm font-bold text-white">Router Agent</p>
-                    <p class="text-xs text-slate-500">Azure AI Agent Service · resposta sintetizada</p>
+                    <p class="text-xs text-slate-500">Azure AI Foundry · GPT-4o · resposta sintetizada</p>
                 </div>
                 <button @click="respostaLivre=null; perguntaEnviada=''"
                         class="ml-auto text-xs text-slate-600 hover:text-slate-400 transition-colors">✕ limpar</button>
             </div>
             <div x-show="perguntaEnviada" class="text-xs text-slate-500 mb-3 italic"
                  x-text="'&quot;' + perguntaEnviada + '&quot;'"></div>
-            <div class="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap" x-text="respostaLivre"></div>
+            <div class="text-sm text-slate-200 leading-relaxed md-body" x-html="renderMd(respostaLivre)"></div>
         </div>
     </div>
 
@@ -764,7 +776,7 @@
                 <!-- Router Agent -->
                 <div class="rounded-xl border border-indigo-500/30 bg-indigo-900/10 px-6 py-4 text-center w-72">
                     <p class="text-xs font-bold text-indigo-400 uppercase tracking-wider mb-1">Router Agent</p>
-                    <p class="text-sm font-bold text-white">Azure AI Agent Service</p>
+                    <p class="text-sm font-bold text-white">Azure AI Foundry</p>
                     <p class="text-xs text-slate-500 mt-1">GPT-4o · FunctionTool · ToolSet</p>
                 </div>
                 <span class="text-slate-600 text-sm">↓ despacha em paralelo</span>
@@ -861,7 +873,7 @@
             <h1 class="text-4xl font-black text-white mb-3">NEXUS</h1>
             <p class="text-slate-300 text-lg mb-4">Plataforma de Inteligência Territorial para o Setor Público Brasileiro</p>
             <div class="flex justify-center gap-2 flex-wrap">
-                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">Azure AI Agent Service</span>
+                <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">Azure AI Foundry</span>
                 <span class="text-xs bg-blue-900/40 text-blue-300 border border-blue-800/50 rounded-full px-3 py-1">MCP · Model Context Protocol</span>
                 <span class="text-xs bg-emerald-900/40 text-emerald-300 border border-emerald-800/50 rounded-full px-3 py-1">Dados Abertos do Governo Federal</span>
             </div>
@@ -882,7 +894,7 @@
                 <div class="text-3xl mb-4">⚙️</div>
                 <h3 class="font-bold text-white text-base mb-2">Como</h3>
                 <p class="text-slate-400 text-sm leading-relaxed">
-                    Um Router Agent (Azure AI Agent Service + GPT-4o) recebe a pergunta,
+                    Um Router Agent (Azure AI Foundry + GPT-4o) recebe a pergunta,
                     planeja e despacha agentes especializados que consultam APIs governamentais
                     abertas em paralelo. Resultados são cruzados pelo código IBGE e
                     sintetizados em linguagem natural.
@@ -989,9 +1001,10 @@ function nexus() {
         respostaLivre: null,
         perguntaEnviada: '',
         exemplosLivre: [
-            'Qual o PIB per capita de Campinas?',
-            'Compare Fortaleza e Recife no aspecto fiscal e social.',
-            'Quantos hospitais existem em Manaus?',
+            'Compare Fortaleza e Manaus: população, Bolsa Família e estabelecimentos de saúde.',
+            'Qual município tem maior PIB per capita: Campinas SP ou Curitiba PR?',
+            'Quantos beneficiários do Bolsa Família tem Salvador BA e qual o valor total transferido?',
+            'Quais são os dados territoriais e fiscais de Recife PE?',
         ],
 
         // Compare
@@ -1045,7 +1058,7 @@ function nexus() {
             { icon:'💻', name:'Copilot',        desc:'GitHub Copilot'    },
         ],
         capabilities: [
-            { icon:'🤖', name:'Orquestração Multi-Agente',  desc:'Router Agent (Azure AI Agent Service) despacha agentes especializados em paralelo com function-calling multi-turno.' },
+            { icon:'🤖', name:'Orquestração Multi-Agente',  desc:'Router Agent (Azure AI Foundry) despacha agentes especializados em paralelo com function-calling multi-turno.' },
             { icon:'🔗', name:'Protocolo MCP',              desc:'FastAPI MCP Server com transporte SSE expõe 4 ferramentas consumíveis por qualquer cliente MCP ou REST.' },
             { icon:'🗺️', name:'Cobertura Nacional',        desc:'5.570 municípios brasileiros indexados pelo código IBGE — chave universal que vincula as três dimensões.' },
             { icon:'🛡️', name:'Dados Abertos e Auditáveis', desc:'Todas as fontes são APIs oficiais do governo federal. Sem PII. Proveniência 100% transparente e verificável.' },
@@ -1159,6 +1172,7 @@ function nexus() {
             this.compareLoading = true; this.compareData = null;
             const post = (path, body) => fetch(`${this.apiBase}${path}`, {
                 method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(body),
+                signal: AbortSignal.timeout(45000),
             }).then(r => r.json());
             try {
                 const [at, bt, af, bf, as_, bs] = await Promise.all([
@@ -1189,11 +1203,14 @@ function nexus() {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ question: q }),
+                    signal: AbortSignal.timeout(90000),
                 });
                 const data = await r.json();
                 this.respostaLivre = data.answer || data.erro || JSON.stringify(data);
             } catch(e) {
-                this.respostaLivre = 'Erro ao contactar o Router Agent. Verifique se o servidor está rodando.';
+                this.respostaLivre = e.name === 'TimeoutError'
+                    ? 'A consulta excedeu o tempo limite (90s). As APIs do governo podem estar lentas — tente novamente.'
+                    : 'Erro ao contactar o Router Agent. Verifique se o servidor está ativo.';
             } finally {
                 this.loadingLivre = false;
             }
@@ -1220,6 +1237,10 @@ function nexus() {
             const r = parseFloat(a) / parseFloat(b);
             if (r >= 2) return r.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '×';
             return (r * 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + '%';
+        },
+        renderMd(text) {
+            if (!text) return '';
+            try { return marked.parse(text); } catch { return text; }
         },
     };
 }
