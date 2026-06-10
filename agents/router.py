@@ -135,28 +135,22 @@ class RouterAgent:
         self._social = SocialAgent()
         self._openai_client: openai.OpenAI | None = None
 
-    def _get_client(self) -> openai.OpenAI | None:
-        if self._openai_client is not None:
-            return self._openai_client
-
+    def _get_client(self, prefer_github: bool = False) -> openai.OpenAI | None:
         # Priority 1: Azure AI Foundry (Nova Fábrica)
-        if settings.AZURE_AI_PROJECT_ENDPOINT and settings.AZURE_AI_API_KEY:
+        if not prefer_github and settings.AZURE_AI_PROJECT_ENDPOINT and settings.AZURE_AI_API_KEY:
             base_url = settings.AZURE_AI_PROJECT_ENDPOINT.rstrip("/") + "/openai/v1/"
-            self._openai_client = openai.OpenAI(
-                base_url=base_url,
-                api_key=settings.AZURE_AI_API_KEY,
-            )
+            client = openai.OpenAI(base_url=base_url, api_key=settings.AZURE_AI_API_KEY)
             logger.info("LLM: Azure AI Foundry")
-            return self._openai_client
+            return client
 
         # Priority 2: GitHub Models (free, same OpenAI API format)
         if settings.GITHUB_TOKEN:
-            self._openai_client = openai.OpenAI(
+            client = openai.OpenAI(
                 base_url="https://models.inference.ai.azure.com",
                 api_key=settings.GITHUB_TOKEN,
             )
             logger.info("LLM: GitHub Models")
-            return self._openai_client
+            return client
 
         return None
 
@@ -199,27 +193,33 @@ class RouterAgent:
 
     async def _resolve_municipio(self, nome: str, uf: str = "") -> dict:
         import httpx
-        async with httpx.AsyncClient(timeout=10) as c:
+        async with httpx.AsyncClient(timeout=15) as c:
             r = await c.get(
                 "https://servicodados.ibge.gov.br/api/v1/localidades/municipios",
-                params={"nome": nome},
             )
             r.raise_for_status()
             data = r.json()
 
+        nome_lower = nome.lower().strip()
         results = []
-        for m in data[:5]:
+        exact = []
+        for m in data:
             try:
                 uf_sigla = m["microrregiao"]["mesorregiao"]["UF"]["sigla"]
+                m_nome_lower = m["nome"].lower()
                 if uf and uf_sigla.upper() != uf.upper():
                     continue
-                results.append({"codigo_ibge": str(m["id"]), "nome": m["nome"], "uf": uf_sigla})
+                if m_nome_lower == nome_lower:
+                    exact.append({"codigo_ibge": str(m["id"]), "nome": m["nome"], "uf": uf_sigla})
+                elif nome_lower in m_nome_lower:
+                    results.append({"codigo_ibge": str(m["id"]), "nome": m["nome"], "uf": uf_sigla})
             except (KeyError, TypeError):
                 pass
 
-        if not results:
+        all_results = exact + results
+        if not all_results:
             return {"erro": f"Município '{nome}' não encontrado"}
-        return {"municipios": results, "principal": results[0]}
+        return {"municipios": all_results[:5], "principal": all_results[0]}
 
     async def _cruzar_dados(
         self,
@@ -247,58 +247,68 @@ class RouterAgent:
             )
         return {"consulta": consulta, "municipios": municipios, "dimensoes": dimensoes}
 
-    async def run_with_azure_agent(self, question: str) -> str:
-        client = self._get_client()
-        if client is None:
-            logger.warning("Azure AI não configurado — usando fallback direto.")
-            return await self._direct_dispatch(question)
+    async def _run_with_client(
+        self, client: openai.OpenAI, model: str, question: str
+    ) -> str:
+        messages: list[dict] = [
+            {"role": "system", "content": _SYSTEM_PROMPT},
+            {"role": "user", "content": question},
+        ]
+        for _ in range(8):  # max 8 turns
+            response = await asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda msgs=messages: client.chat.completions.create(
+                    model=model,
+                    messages=msgs,
+                    tools=_TOOLS,
+                    tool_choice="auto",
+                    max_tokens=2048,
+                ),
+            )
+            msg = response.choices[0].message
+            messages.append(msg.model_dump(exclude_unset=False))
 
+            if not msg.tool_calls:
+                return msg.content or "Não foi possível gerar uma resposta."
+
+            tool_results = await asyncio.gather(*[
+                self._execute_tool(tc.function.name, json.loads(tc.function.arguments))
+                for tc in msg.tool_calls
+            ])
+            for tc, result in zip(msg.tool_calls, tool_results):
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
+
+        return "Limite de iterações atingido sem resposta final."
+
+    async def run_with_azure_agent(self, question: str) -> str:
         with tracer.start_as_current_span("router.gpt4o_run") as span:
             span.set_attribute("question_len", len(question))
-            messages: list[dict] = [
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": question},
-            ]
 
-            try:
-                for _ in range(8):  # max 8 turns
-                    response = await asyncio.get_event_loop().run_in_executor(
-                        None,
-                        lambda msgs=messages: client.chat.completions.create(
-                            model=settings.GITHUB_MODEL if settings.GITHUB_TOKEN and not settings.AZURE_AI_PROJECT_ENDPOINT else settings.AZURE_OPENAI_DEPLOYMENT,
-                            messages=msgs,
-                            tools=_TOOLS,
-                            tool_choice="auto",
-                            max_tokens=2048,
-                        ),
+            # Try Azure AI Foundry first
+            azure_client = self._get_client(prefer_github=False)
+            if azure_client and settings.AZURE_AI_PROJECT_ENDPOINT:
+                try:
+                    return await self._run_with_client(
+                        azure_client, settings.AZURE_OPENAI_DEPLOYMENT, question
                     )
+                except (openai.NotFoundError, openai.AuthenticationError) as e:
+                    logger.warning(f"Azure AI Foundry indisponível ({e.__class__.__name__}) — tentando GitHub Models.")
+                except Exception as e:
+                    logger.warning(f"Azure AI Foundry erro ({e}) — tentando GitHub Models.")
 
-                    msg = response.choices[0].message
-                    messages.append(msg.model_dump(exclude_unset=False))
+            # Fallback: GitHub Models
+            github_client = self._get_client(prefer_github=True)
+            if github_client:
+                try:
+                    return await self._run_with_client(
+                        github_client, settings.GITHUB_MODEL, question
+                    )
+                except Exception as e:
+                    logger.error(f"GitHub Models erro: {e}")
 
-                    if not msg.tool_calls:
-                        return msg.content or "Não foi possível gerar uma resposta."
-
-                    tool_results = await asyncio.gather(*[
-                        self._execute_tool(tc.function.name, json.loads(tc.function.arguments))
-                        for tc in msg.tool_calls
-                    ])
-
-                    for tc, result in zip(msg.tool_calls, tool_results):
-                        messages.append({
-                            "role": "tool",
-                            "tool_call_id": tc.id,
-                            "content": result,
-                        })
-
-                return "Limite de iterações atingido sem resposta final."
-
-            except openai.NotFoundError:
-                logger.error("GPT-4o deployment not found — deploy it in Azure AI Foundry first.")
-                return await self._direct_dispatch(question)
-            except Exception as e:
-                logger.error(f"Azure GPT-4o error: {e}")
-                return await self._direct_dispatch(question)
+            # Last resort: keyword-based dispatch
+            logger.warning("Nenhum LLM disponível — usando fallback direto.")
+            return await self._direct_dispatch(question)
 
     async def _direct_dispatch(self, question: str) -> str:
         """Fallback: tenta resolver município pelo nome e cruza todas as dimensões."""

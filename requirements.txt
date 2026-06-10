@@ -8,16 +8,17 @@ mcp>=1.9.0
 tenacity>=9.0.0
 structlog>=24.4.0
 
+# OpenAI SDK (Azure AI Foundry + GitHub Models)
+openai>=1.55.0
+
 # OpenTelemetry
 opentelemetry-api>=1.29.0
 opentelemetry-sdk>=1.29.0
 opentelemetry-instrumentation-fastapi>=0.50b0
 opentelemetry-exporter-otlp-proto-grpc>=1.29.0
 
-# Azure AI Foundry
-azure-ai-projects>=1.0.0b9
+# Azure identity (used for credential types)
 azure-identity>=1.19.0
 
-# File serving & tests
+# File serving
 aiofiles>=23.2.0
-pytest-asyncio>=0.24.0
