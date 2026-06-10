@@ -4,6 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NEXUS — Inteligência Territorial</title>
+    <meta name="description" content="Plataforma multi-agente que cruza dados fiscais, territoriais e sociais de qualquer município brasileiro em linguagem natural.">
+    <meta property="og:title" content="NEXUS — Inteligência Territorial">
+    <meta property="og:description" content="Dados fiscais, territoriais e sociais de 5.570 municípios brasileiros cruzados por agentes de IA em tempo real.">
+    <meta property="og:type" content="website">
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="NEXUS — Inteligência Territorial">
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%233b82f6'/><stop offset='1' stop-color='%2310b981'/></linearGradient></defs><rect width='100' height='100' rx='22' fill='url(%23g)'/><text y='.9em' font-size='60' font-weight='900' font-family='sans-serif' fill='white' x='12'>NX</text></svg>">
 
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
@@ -328,6 +335,15 @@
         </div>
     </div>
 
+    <!-- Erro de consulta -->
+    <div x-show="queryError" x-cloak class="max-w-2xl mx-auto px-4 sm:px-6 pb-4">
+        <div class="rounded-xl border border-red-800/50 bg-red-900/15 px-4 py-3 flex items-start gap-3">
+            <span class="text-red-400 shrink-0 mt-0.5">⚠</span>
+            <p class="text-sm text-red-300 leading-relaxed" x-text="queryError"></p>
+            <button @click="queryError=null" class="ml-auto text-red-600 hover:text-red-400 shrink-0">✕</button>
+        </div>
+    </div>
+
     <!-- Results -->
     <div x-show="results" x-cloak class="max-w-7xl mx-auto px-4 sm:px-6 pb-16">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-5">
@@ -387,25 +403,28 @@
                     <span class="ml-auto text-xs bg-amber-900/40 text-amber-400 border border-amber-800/50 rounded-full px-2 py-0.5">Gov.BR</span>
                 </div>
 
-                <template x-if="!results?.fiscal?.bolsa_familia?.beneficiarios">
-                    <div class="rounded-lg bg-amber-900/15 border border-amber-800/30 p-3 mb-4">
-                        <p class="text-xs text-amber-300 leading-relaxed">
-                            Configure <code class="bg-amber-900/40 px-1 rounded font-mono">TRANSPARENCIA_API_KEY</code>
-                            no <code class="bg-amber-900/40 px-1 rounded font-mono">.env</code> para dados fiscais.
-                            Chave gratuita em portaldatransparencia.gov.br/api-de-dados.
-                        </p>
-                    </div>
-                </template>
-
                 <div class="space-y-3">
                     <template x-if="results?.fiscal?.bolsa_familia?.beneficiarios">
                         <div class="rounded-lg bg-amber-500/8 border border-amber-500/15 p-3">
-                            <p class="text-xs text-slate-400 mb-1">Bolsa Família — Beneficiários</p>
+                            <p class="text-xs text-slate-400 mb-1">Novo Bolsa Família — Beneficiários</p>
                             <p class="text-2xl font-bold text-amber-400" x-text="fmtNum(results.fiscal.bolsa_familia.beneficiarios)"></p>
-                            <template x-if="results.fiscal.bolsa_familia.valor_total_reais">
-                                <p class="text-xs text-amber-300 mt-0.5"
-                                   x-text="'Valor: '+fmtCurrency(results.fiscal.bolsa_familia.valor_total_reais)"></p>
-                            </template>
+                            <div class="flex gap-3 mt-1 flex-wrap">
+                                <template x-if="results.fiscal.bolsa_familia.valor_total_reais">
+                                    <p class="text-xs text-amber-300"
+                                       x-text="'Total: '+fmtCurrency(results.fiscal.bolsa_familia.valor_total_reais)"></p>
+                                </template>
+                                <template x-if="results.fiscal.bolsa_familia.mes_ano">
+                                    <p class="text-xs text-slate-500"
+                                       x-text="'Ref.: '+results.fiscal.bolsa_familia.mes_ano.replace(/(\d{4})(\d{2})/,'$2/$1')"></p>
+                                </template>
+                            </div>
+                        </div>
+                    </template>
+
+                    <template x-if="!results?.fiscal?.bolsa_familia?.beneficiarios">
+                        <div class="rounded-lg bg-slate-800/50 border border-slate-700/50 p-3">
+                            <p class="text-xs text-slate-500">Bolsa Família</p>
+                            <p class="text-sm text-slate-400 mt-1">Sem beneficiários registrados para este município.</p>
                         </div>
                     </template>
 
@@ -418,11 +437,12 @@
                     <div class="flex justify-between items-baseline">
                         <span class="text-xs text-slate-500">Convênios federais</span>
                         <span class="text-sm font-semibold text-amber-300"
-                              x-text="results?.fiscal?.convenios?.quantidade_convenios ?? '—'"></span>
+                              x-text="(results?.fiscal?.convenios?.quantidade_convenios ?? 0) > 0
+                                       ? results.fiscal.convenios.quantidade_convenios : '—'"></span>
                     </div>
                     <div class="flex justify-between items-baseline pt-1 border-t border-white/5">
                         <span class="text-xs text-slate-600">Ano de referência</span>
-                        <span class="text-xs text-slate-500">2024</span>
+                        <span class="text-xs text-slate-500" x-text="results?.fiscal?.ano ?? '2024'"></span>
                     </div>
                 </div>
             </div>
@@ -571,7 +591,7 @@
 
         <!-- CTA -->
         <div class="flex justify-center mb-8">
-            <button @click="comparar()" :disabled="!compareA||!compareB||compareLoading"
+            <button @click="comparar(); compareSintese=null" :disabled="!compareA||!compareB||compareLoading"
                     class="px-10 py-3.5 rounded-xl font-bold text-sm text-white transition-all
                            bg-gradient-to-r from-blue-600 via-violet-600 to-violet-500
                            hover:from-blue-500 hover:to-violet-400
@@ -581,6 +601,36 @@
                 <span x-text="compareLoading?'Comparando…':'Comparar →'"></span>
             </button>
         </div>
+
+        <!-- Síntese automática -->
+        <template x-if="compareData">
+            <div class="glass rounded-2xl p-5 mb-6 slide-up">
+                <p class="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Análise Comparativa</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <template x-if="compareData.a.territorial.populacao?.populacao_censo_2022 && compareData.b.territorial.populacao?.populacao_censo_2022">
+                        <div class="rounded-lg bg-emerald-500/8 border border-emerald-500/15 p-3">
+                            <p class="text-xs text-slate-500 mb-1">População (Censo 2022)</p>
+                            <p class="text-sm font-bold text-white"
+                               x-text="compareData.a.territorial.municipio?.nome + ' tem ' + fmtRatio(compareData.a.territorial.populacao.populacao_censo_2022, compareData.b.territorial.populacao.populacao_censo_2022) + ' a população de ' + compareData.b.territorial.municipio?.nome"></p>
+                        </div>
+                    </template>
+                    <template x-if="compareData.a.territorial.pib?.pib_per_capita_reais && compareData.b.territorial.pib?.pib_per_capita_reais">
+                        <div class="rounded-lg bg-blue-500/8 border border-blue-500/15 p-3">
+                            <p class="text-xs text-slate-500 mb-1">PIB per capita</p>
+                            <p class="text-sm font-bold text-white"
+                               x-text="(compareData.a.territorial.pib.pib_per_capita_reais > compareData.b.territorial.pib.pib_per_capita_reais ? compareData.a.territorial.municipio?.nome : compareData.b.territorial.municipio?.nome) + ' tem PIB/cap ' + fmtRatio(Math.max(compareData.a.territorial.pib.pib_per_capita_reais, compareData.b.territorial.pib.pib_per_capita_reais), Math.min(compareData.a.territorial.pib.pib_per_capita_reais, compareData.b.territorial.pib.pib_per_capita_reais)) + ' maior'"></p>
+                        </div>
+                    </template>
+                    <template x-if="compareData.a.fiscal.bolsa_familia?.beneficiarios && compareData.b.fiscal.bolsa_familia?.beneficiarios">
+                        <div class="rounded-lg bg-amber-500/8 border border-amber-500/15 p-3">
+                            <p class="text-xs text-slate-500 mb-1">Bolsa Família</p>
+                            <p class="text-sm font-bold text-white"
+                               x-text="(compareData.a.fiscal.bolsa_familia.beneficiarios > compareData.b.fiscal.bolsa_familia.beneficiarios ? compareData.a.territorial.municipio?.nome : compareData.b.territorial.municipio?.nome) + ' tem ' + fmtRatio(Math.max(compareData.a.fiscal.bolsa_familia.beneficiarios, compareData.b.fiscal.bolsa_familia.beneficiarios), Math.min(compareData.a.fiscal.bolsa_familia.beneficiarios, compareData.b.fiscal.bolsa_familia.beneficiarios)) + ' mais beneficiários'"></p>
+                        </div>
+                    </template>
+                </div>
+            </div>
+        </template>
 
         <!-- Table -->
         <template x-if="compareData">
@@ -928,6 +978,8 @@ function nexus() {
 
         // Query (municipio mode)
         loading: false,
+        loadingTimeout: null,
+        queryError: null,
         agentStatuses: { router:'idle', fiscal:'idle', territorial:'idle', social:'idle' },
         results: null,
 
@@ -948,6 +1000,7 @@ function nexus() {
         showCompareASugg: false, showCompareBSugg: false,
         compareA: null, compareB: null,
         compareData: null, compareLoading: false,
+        compareSintese: null,
 
         // Quick access
         quickAccess: [
@@ -1059,7 +1112,13 @@ function nexus() {
             if (!this.selectedMuni || this.loading) return;
             this.loading = true;
             this.results = null;
+            this.queryError = null;
             this.agentStatuses = { router:'loading', fiscal:'idle', territorial:'idle', social:'idle' };
+
+            // Timeout visual após 25s
+            this.loadingTimeout = setTimeout(() => {
+                if (this.loading) this.queryError = 'A consulta está demorando mais que o esperado. As APIs do governo podem estar lentas — aguarde ou tente novamente.';
+            }, 25000);
 
             await new Promise(r => setTimeout(r, 480));
             this.agentStatuses = { router:'done', fiscal:'loading', territorial:'loading', social:'loading' };
@@ -1070,6 +1129,7 @@ function nexus() {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
+                signal: AbortSignal.timeout(45000),
             });
 
             try {
@@ -1082,10 +1142,15 @@ function nexus() {
                         .then(r => { this.agentStatuses = {...this.agentStatuses, social:'done'}; return r.json(); }),
                 ]);
                 this.results = { fiscal, territorial, social };
+                this.queryError = null;
             } catch(e) {
                 console.error('consultar', e);
                 this.agentStatuses = { router:'error', fiscal:'error', territorial:'error', social:'error' };
-            } finally { this.loading = false; }
+                this.queryError = 'Erro ao consultar os agentes. Verifique se o servidor está ativo e tente novamente.';
+            } finally {
+                this.loading = false;
+                clearTimeout(this.loadingTimeout);
+            }
         },
 
         // ── Comparar ──────────────────────────────────────────────────────
@@ -1149,6 +1214,12 @@ function nexus() {
             if (n == null) return '—';
             const v = parseFloat(n);
             return isNaN(v) ? '—' : 'R$ '+(v/1000).toLocaleString('pt-BR',{ minimumFractionDigits:1, maximumFractionDigits:1 })+'k';
+        },
+        fmtRatio(a, b) {
+            if (!a || !b || b === 0) return '—';
+            const r = parseFloat(a) / parseFloat(b);
+            if (r >= 2) return r.toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + '×';
+            return (r * 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 }) + '%';
         },
     };
 }
