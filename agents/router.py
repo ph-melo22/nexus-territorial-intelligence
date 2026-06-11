@@ -249,11 +249,14 @@ class RouterAgent:
 
     async def _run_with_client(
         self, client: openai.OpenAI, model: str, question: str
-    ) -> str:
+    ) -> dict:
+        """Returns {"answer": str, "steps": [...], "model": str}"""
         messages: list[dict] = [
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": question},
         ]
+        steps: list[dict] = []
+
         for _ in range(8):  # max 8 turns
             response = await asyncio.get_event_loop().run_in_executor(
                 None,
@@ -269,7 +272,19 @@ class RouterAgent:
             messages.append(msg.model_dump(exclude_unset=False))
 
             if not msg.tool_calls:
-                return msg.content or "Não foi possível gerar uma resposta."
+                return {
+                    "answer": msg.content or "Não foi possível gerar uma resposta.",
+                    "steps": steps,
+                    "model": model,
+                }
+
+            # Record reasoning steps
+            for tc in msg.tool_calls:
+                args = json.loads(tc.function.arguments)
+                steps.append({
+                    "tool": tc.function.name,
+                    "args": {k: v for k, v in args.items() if k != "consulta"},
+                })
 
             tool_results = await asyncio.gather(*[
                 self._execute_tool(tc.function.name, json.loads(tc.function.arguments))
@@ -278,9 +293,10 @@ class RouterAgent:
             for tc, result in zip(msg.tool_calls, tool_results):
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": result})
 
-        return "Limite de iterações atingido sem resposta final."
+        return {"answer": "Limite de iterações atingido sem resposta final.", "steps": steps, "model": model}
 
-    async def run_with_azure_agent(self, question: str) -> str:
+    async def run_with_azure_agent(self, question: str) -> dict:
+        """Returns {"answer": str, "steps": [...], "model": str}"""
         with tracer.start_as_current_span("router.gpt4o_run") as span:
             span.set_attribute("question_len", len(question))
 
@@ -308,7 +324,8 @@ class RouterAgent:
 
             # Last resort: keyword-based dispatch
             logger.warning("Nenhum LLM disponível — usando fallback direto.")
-            return await self._direct_dispatch(question)
+            raw = await self._direct_dispatch(question)
+            return {"answer": raw, "steps": [], "model": "direct"}
 
     async def _direct_dispatch(self, question: str) -> str:
         """Fallback: tenta resolver município pelo nome e cruza todas as dimensões."""

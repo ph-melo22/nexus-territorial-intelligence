@@ -162,26 +162,65 @@ class TransparenciaClient:
                 "fonte": "Portal da Transparência — Licitações",
             }
 
+    # ── Emendas Parlamentares ─────────────────────────────────────────────────
+
+    async def get_emendas(self, ibge_code: str, ano: int = 2024) -> dict:
+        """Parliamentary amendments (emendas) directed to the municipality."""
+        with tracer.start_as_current_span("transparencia.emendas") as span:
+            span.set_attribute("ibge.code", ibge_code)
+            data = await self._get(
+                "/emendas",
+                codigoMunicipio=ibge_code,
+                ano=ano,
+                pagina=1,
+            )
+            registros = data if isinstance(data, list) else []
+            valor_pago = sum(
+                float(str(r.get("valorPago", "0") or "0").replace(",", "."))
+                for r in registros
+            )
+            valor_empenhado = sum(
+                float(str(r.get("valorEmpenhado", "0") or "0").replace(",", "."))
+                for r in registros
+            )
+            return {
+                "quantidade_emendas": len(registros),
+                "valor_pago_reais": round(valor_pago, 2),
+                "valor_empenhado_reais": round(valor_empenhado, 2),
+                "ano": ano,
+                "emendas": [
+                    {
+                        "autor": r.get("nomeAutor"),
+                        "tipo": r.get("tipoEmenda"),
+                        "funcao": r.get("funcao"),
+                        "valor_pago": r.get("valorPago"),
+                    }
+                    for r in registros[:5]
+                ],
+                "fonte": "Portal da Transparência — Emendas Parlamentares",
+            }
+
     # ── Composite ─────────────────────────────────────────────────────────────
 
     async def get_perfil_fiscal(self, ibge_code: str, ano: int = 2024) -> dict:
         """All fiscal indicators fetched concurrently."""
         with tracer.start_as_current_span("transparencia.perfil_fiscal") as span:
             span.set_attribute("ibge.code", ibge_code)
-            # Use most recent month of the year for Bolsa Família
             mes = 12 if ano < date.today().year else date.today().month - 1 or 1
-            bf, transferencias, convenios = await asyncio.gather(
+            bf, transferencias, convenios, emendas = await asyncio.gather(
                 self.get_bolsa_familia(ibge_code, ano, mes),
                 self.get_transferencias(ibge_code, ano),
                 self.get_convenios(ibge_code, ano),
+                self.get_emendas(ibge_code, ano),
                 return_exceptions=True,
             )
             return {
                 "codigo_ibge": ibge_code,
                 "ano": ano,
                 "bolsa_familia": bf if not isinstance(bf, Exception) else {"erro": str(bf)},
-                "transferencias_federais": transferencias if not isinstance(transferencias, Exception) else {"erro": str(transferencias)},
-                "convenios": convenios if not isinstance(convenios, Exception) else {"erro": str(convenios)},
+                "transferencias_federais": transferencias if not isinstance(transferencias, Exception) else {"aviso": "Endpoint requer acesso premium na API da Transparência", "total_transferido_reais": 0},
+                "convenios": convenios if not isinstance(convenios, Exception) else {"aviso": "Parâmetros não suportados neste tier da API", "quantidade_convenios": 0},
+                "emendas_parlamentares": emendas if not isinstance(emendas, Exception) else {"erro": str(emendas)},
                 "fonte": "Portal da Transparência",
                 "url_api": "https://api.portaldatransparencia.gov.br/api-de-dados",
             }

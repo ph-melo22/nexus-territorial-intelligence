@@ -416,8 +416,13 @@ async def query(request: Request) -> JSONResponse:
     router = RouterAgent()
     try:
         with tracer.start_as_current_span("rest.query"):
-            answer = await router.run_with_azure_agent(question)
-        return JSONResponse({"question": question, "answer": answer})
+            result = await router.run_with_azure_agent(question)
+        return JSONResponse({
+            "question": question,
+            "answer": result.get("answer", ""),
+            "steps": result.get("steps", []),
+            "model": result.get("model", ""),
+        })
     finally:
         await router.aclose()
 

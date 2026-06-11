@@ -268,11 +268,36 @@
                 <div class="w-7 h-7 rounded-lg bg-indigo-500/20 flex items-center justify-center shrink-0">🤖</div>
                 <div>
                     <p class="text-sm font-bold text-white">Router Agent</p>
-                    <p class="text-xs text-slate-500">Azure AI Foundry · GPT-4o · resposta sintetizada</p>
+                    <p class="text-xs text-slate-500" x-text="queryModel ? 'Azure AI Foundry · '+queryModel : 'Azure AI Foundry · GPT-4o'"></p>
                 </div>
-                <button @click="respostaLivre=null; perguntaEnviada=''"
+                <button @click="respostaLivre=null; perguntaEnviada=''; querySteps=[]; queryModel=''"
                         class="ml-auto text-xs text-slate-600 hover:text-slate-400 transition-colors">✕ limpar</button>
             </div>
+
+            <!-- Passos de raciocínio -->
+            <template x-if="querySteps.length > 0">
+                <div class="mb-4 rounded-xl bg-indigo-900/15 border border-indigo-500/20 p-3">
+                    <p class="text-xs font-bold text-indigo-400 uppercase tracking-widest mb-2">Passos de Raciocínio — <span x-text="querySteps.length + ' chamadas'"></span></p>
+                    <div class="flex flex-wrap gap-2">
+                        <template x-for="(step, i) in querySteps" :key="i">
+                            <div class="flex items-center gap-1.5 bg-indigo-900/30 border border-indigo-500/25 rounded-lg px-2.5 py-1.5">
+                                <span class="text-indigo-400 font-bold text-xs" x-text="i+1+'.'" ></span>
+                                <span class="text-xs text-indigo-300 font-medium" x-text="stepLabel(step.tool)"></span>
+                                <template x-if="step.args.nome">
+                                    <span class="text-xs text-slate-400" x-text="'→ '+step.args.nome+(step.args.uf?' ('+step.args.uf+')':'')"></span>
+                                </template>
+                                <template x-if="step.args.codigo_ibge">
+                                    <span class="text-xs text-slate-400" x-text="'→ '+step.args.codigo_ibge"></span>
+                                </template>
+                                <template x-if="step.args.codigos_ibge">
+                                    <span class="text-xs text-slate-400" x-text="'→ '+step.args.codigos_ibge.join(', ')"></span>
+                                </template>
+                            </div>
+                        </template>
+                    </div>
+                </div>
+            </template>
+
             <div x-show="perguntaEnviada" class="text-xs text-slate-500 mb-3 italic"
                  x-text="'&quot;' + perguntaEnviada + '&quot;'"></div>
             <div class="text-sm text-slate-200 leading-relaxed md-body" x-html="renderMd(respostaLivre)"></div>
@@ -452,6 +477,13 @@
                               x-text="(results?.fiscal?.convenios?.quantidade_convenios ?? 0) > 0
                                        ? results.fiscal.convenios.quantidade_convenios : '—'"></span>
                     </div>
+                    <template x-if="results?.fiscal?.emendas_parlamentares?.quantidade_emendas > 0">
+                        <div class="flex justify-between items-baseline">
+                            <span class="text-xs text-slate-500">Emendas parlamentares</span>
+                            <span class="text-sm font-semibold text-amber-300"
+                                  x-text="results.fiscal.emendas_parlamentares.quantidade_emendas + ' emendas'"></span>
+                        </div>
+                    </template>
                     <div class="flex justify-between items-baseline pt-1 border-t border-white/5">
                         <span class="text-xs text-slate-600">Ano de referência</span>
                         <span class="text-xs text-slate-500" x-text="results?.fiscal?.ano ?? '2024'"></span>
@@ -1000,6 +1032,8 @@ function nexus() {
         loadingLivre: false,
         respostaLivre: null,
         perguntaEnviada: '',
+        querySteps: [],
+        queryModel: '',
         exemplosLivre: [
             'Compare Fortaleza e Manaus: população, Bolsa Família e estabelecimentos de saúde.',
             'Qual município tem maior PIB per capita: Campinas SP ou Curitiba PR?',
@@ -1197,6 +1231,8 @@ function nexus() {
             if (!q || this.loadingLivre) return;
             this.loadingLivre = true;
             this.respostaLivre = null;
+            this.querySteps = [];
+            this.queryModel = '';
             this.perguntaEnviada = q;
             try {
                 const r = await fetch(`${this.apiBase}/v1/query`, {
@@ -1207,6 +1243,8 @@ function nexus() {
                 });
                 const data = await r.json();
                 this.respostaLivre = data.answer || data.erro || JSON.stringify(data);
+                this.querySteps = data.steps || [];
+                this.queryModel = data.model || '';
             } catch(e) {
                 this.respostaLivre = e.name === 'TimeoutError'
                     ? 'A consulta excedeu o tempo limite (90s). As APIs do governo podem estar lentas — tente novamente.'
@@ -1241,6 +1279,15 @@ function nexus() {
         renderMd(text) {
             if (!text) return '';
             try { return marked.parse(text); } catch { return text; }
+        },
+        stepLabel(tool) {
+            return {
+                buscar_municipio:   '🔍 Resolver município',
+                buscar_fiscal:      '💰 Dados fiscais',
+                buscar_territorial: '🗺️ Dados territoriais',
+                buscar_social:      '🏥 Dados sociais',
+                cruzar_dados:       '⚡ Cruzar dimensões',
+            }[tool] || tool;
         },
     };
 }
